@@ -60,8 +60,7 @@ Upload candidate CV and project report documents.
 ```json
 {
   "candidate_cv_id": "d6caccc4-35dc-4e2b-b1c3-4548bcc9e532",
-  "project_report_id": "fde18c07-d0f3-4db3-a607-84a257e5b233",
-  "message": "Files uploaded successfully"
+  "project_report_id": "fde18c07-d0f3-4db3-a607-84a257e5b233"
 }
 ```
 
