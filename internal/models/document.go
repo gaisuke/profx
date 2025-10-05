@@ -10,7 +10,6 @@ type UploadRequest struct {
 type UploadResponse struct {
 	CandidateCVID   string `json:"candidate_cv_id"`
 	ProjectReportID string `json:"project_report_id"`
-	Message         string `json:"message"`
 }
 
 // ErrorResponse represents an error response
