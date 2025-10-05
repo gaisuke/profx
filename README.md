@@ -86,14 +86,76 @@ curl -X POST http://localhost:8080/upload \
 
 ## Project Structure
 
+The project follows a clean architecture pattern with clear separation of concerns:
+
 ```
 profx/
-├── main.go           # Main application file with HTTP server and upload handler
-├── uploads/          # Directory where uploaded files are stored (gitignored)
-├── go.mod            # Go module dependencies
-├── go.sum            # Go module checksums
-└── README.md         # This file
+├── main.go                           # Application entry point
+├── internal/                         # Internal application code
+│   ├── handlers/                     # HTTP handlers (presentation layer)
+│   │   └── upload_handler.go        # Upload endpoint handler
+│   ├── services/                     # Business logic layer
+│   │   └── document_service.go      # Document processing service
+│   ├── storage/                      # Storage layer (repository pattern)
+│   │   ├── storage.go                # Storage interface
+│   │   └── file_storage.go          # File system implementation
+│   └── models/                       # Data models
+│       └── document.go               # Document-related models
+├── uploads/                          # Directory for uploaded files (gitignored)
+├── test_api.sh                       # API test script
+├── go.mod                            # Go module dependencies
+├── go.sum                            # Go module checksums
+└── README.md                         # This file
 ```
+
+### Architecture
+
+The application follows these design patterns:
+
+- **Layered Architecture**: Clear separation between handlers, services, and storage
+- **Dependency Injection**: Dependencies are injected through constructors
+- **Interface-based Design**: Storage layer uses interfaces for easy mocking and testing
+- **Repository Pattern**: Storage abstraction allows switching implementations (file system, S3, etc.)
+
+This structure makes the codebase:
+- Easy to test (each layer can be tested independently)
+- Maintainable (clear separation of concerns)
+- Scalable (easy to add new endpoints and features)
+- Flexible (easy to swap implementations)
+
+## Testing the API
+
+### Quick Test with cURL
+
+Test the upload endpoint with sample files:
+
+```bash
+# Make sure the server is running first
+./profx-server &
+
+# Upload both files
+curl -X POST http://localhost:8080/upload \
+  -F "candidate_cv=@/path/to/your/cv.pdf" \
+  -F "project_report=@/path/to/your/report.pdf"
+```
+
+### Automated Test Suite
+
+Run the included test script to validate all API functionality:
+
+```bash
+# Make sure the server is running first
+./profx-server &
+
+# Run the test suite
+./test_api.sh
+```
+
+The test suite validates:
+- ✓ Successful file upload with valid PDFs
+- ✓ Error handling for missing files
+- ✓ HTTP method validation
+- ✓ File type validation (PDF only)
 
 ## Development
 
@@ -107,4 +169,21 @@ go test ./...
 
 ```bash
 go build -ldflags="-s -w" -o profx-server main.go
+```
+
+### Adding New Endpoints
+
+Thanks to the layered architecture, adding new endpoints is straightforward:
+
+1. **Add Model** (if needed): Define your request/response structures in `internal/models/`
+2. **Add Storage** (if needed): Implement storage operations in `internal/storage/`
+3. **Add Service**: Implement business logic in `internal/services/`
+4. **Add Handler**: Create HTTP handler in `internal/handlers/`
+5. **Register Route**: Register the handler in `main.go`
+
+Example of registering a new handler:
+```go
+// In main.go
+newHandler := handlers.NewYourHandler(yourService)
+http.Handle("/your-endpoint", newHandler)
 ```
