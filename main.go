@@ -29,7 +29,7 @@ func main() {
 	http.Handle("/upload", uploadHandler)
 	
 	// Get port from environment or use default
-	port := os.Getenv("PORT")
+	port := os.Getenv("SERVER_PORT")
 	if port == "" {
 		port = "8080"
 	}
