@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -9,53 +10,45 @@ import (
 	"github.com/google/uuid"
 )
 
-// FileStorage implements Storage interface for local file system
+type Storage interface {
+	Save(file io.Reader, filename string) (*models.Document, error)
+}
+
 type FileStorage struct {
-	baseDir string
+	uploadDir string
 }
 
-// NewFileStorage creates a new FileStorage instance
-func NewFileStorage(baseDir string) (*FileStorage, error) {
-	// Ensure directory exists
-	if err := os.MkdirAll(baseDir, 0755); err != nil {
-		return nil, err
+func NewFileStorage(uploadDir string) (*FileStorage, error) {
+	if err := os.MkdirAll(uploadDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create upload directory: %w", err)
 	}
-	
+
 	return &FileStorage{
-		baseDir: baseDir,
+		uploadDir: uploadDir,
 	}, nil
+
 }
 
-// Save stores a file and returns a Document with its ID
 func (fs *FileStorage) Save(file io.Reader, filename string) (*models.Document, error) {
-	// Generate unique ID
 	id := uuid.New().String()
-	
-	// Determine file extension
 	ext := filepath.Ext(filename)
-	path := filepath.Join(fs.baseDir, id+ext)
-	
-	// Create destination file
-	dst, err := os.Create(path)
+	newFilename := fmt.Sprintf("%s%s", id, ext)
+	filePath := filepath.Join(fs.uploadDir, newFilename)
+
+	dst, err := os.Create(filePath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create file: %w", err)
 	}
 	defer dst.Close()
-	
-	// Copy file content
-	if _, err := io.Copy(dst, file); err != nil {
-		os.Remove(path) // Cleanup on error
-		return nil, err
-	}
-	
-	return &models.Document{
-		ID:       id,
-		Filename: filename,
-		Path:     path,
-	}, nil
-}
 
-// GetPath returns the file path for a given document ID
-func (fs *FileStorage) GetPath(id string) string {
-	return filepath.Join(fs.baseDir, id+".pdf")
+	if _, err := io.Copy(dst, file); err != nil {
+		os.Remove(filePath)
+		return nil, fmt.Errorf("failed to save file: %w", err)
+	}
+
+	return &models.Document{
+		ID:               id,
+		OriginalFilename: filename,
+		FilePath:         filePath,
+	}, nil
 }
