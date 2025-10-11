@@ -57,6 +57,9 @@ func main() {
 
 	// Get port from environment or use default
 	port := getEnv("SERVER_PORT")
+	if port == "" {
+		port = "8080"
+	}
 
 	log.Printf("Server starting on port %s...\n", port)
 	log.Printf("Upload endpoint: POST http://localhost:%s/upload\n", port)

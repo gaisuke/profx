@@ -55,8 +55,8 @@ func (h *UploadHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Upload documents via service
 	response, err := h.service.UploadDocuments(
-		cvFile, cvHeader.Filename,
-		reportFile, reportHeader.Filename,
+		cvFile, reportFile,
+		cvHeader.Filename, reportHeader.Filename,
 	)
 	if err != nil {
 		if err == services.ErrInvalidFileType {
@@ -68,7 +68,7 @@ func (h *UploadHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Log successful upload
-	log.Printf("Files uploaded successfully - CV: %s, Report: %s\n", 
+	log.Printf("Files uploaded successfully - CV: %s, Report: %s\n",
 		response.CandidateCVID, response.ProjectReportID)
 
 	// Send success response

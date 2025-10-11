@@ -1,5 +1,7 @@
 package models
 
+import "time"
+
 type DocumentType string
 
 const (
@@ -26,5 +28,5 @@ type Document struct {
 	Type             DocumentType `json:"type" db:"type"`
 	OriginalFilename string       `json:"original_filename" db:"original_filename"`
 	FilePath         string       `json:"file_path" db:"file_path"`
-	UploadedAt       int64        `json:"uploaded_at" db:"uploaded_at"`
+	UploadedAt       *time.Time   `json:"uploaded_at" db:"uploaded_at"`
 }
