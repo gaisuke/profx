@@ -10,6 +10,7 @@ import (
 	"github.com/gaisuke/profx/internal/handlers"
 	"github.com/gaisuke/profx/internal/services"
 	"github.com/gaisuke/profx/internal/storage"
+	"github.com/go-playground/validator/v10"
 	"github.com/joho/godotenv"
 )
 
@@ -38,6 +39,14 @@ func main() {
 	}
 	defer db.Close()
 
+	validator := validator.New()
+
+	jobQueueSize := getEnvAsInt("JOB_QUEUE_SIZE")
+	if jobQueueSize <= 0 {
+		jobQueueSize = 100 // default queue size
+	}
+	jobQueue := make(chan string, jobQueueSize)
+
 	// Initialize storage layers
 	fileStorage, err := storage.NewFileStorage(uploadDir)
 	if err != nil {
@@ -45,15 +54,21 @@ func main() {
 	}
 
 	documentRepo := storage.NewDocumentRepository(db)
+	jobRepo := storage.NewJobRepository(db)
 
 	// Initialize service layer
 	documentService := services.NewDocumentService(fileStorage, documentRepo)
+	jobService := services.NewJobService(jobRepo, documentRepo, jobQueue)
 
 	// Initialize handler layer
 	uploadHandler := handlers.NewUploadHandler(documentService)
+	evaluateHandler := handlers.NewEvaluateHandler(jobService, validator)
+	resultHandler := handlers.NewResultHandler(jobService, validator)
 
 	// Register routes
 	http.Handle("/upload", uploadHandler)
+	http.Handle("/evaluate", evaluateHandler)
+	http.Handle("/result/", resultHandler)
 
 	// Get port from environment or use default
 	port := getEnv("SERVER_PORT")
@@ -63,6 +78,8 @@ func main() {
 
 	log.Printf("Server starting on port %s...\n", port)
 	log.Printf("Upload endpoint: POST http://localhost:%s/upload\n", port)
+	log.Printf("Evaluate endpoint: POST http://localhost:%s/evaluate\n", port)
+	log.Printf("Result endpoint: GET http://localhost:%s/result/{job_id}\n", port)
 
 	// Start server
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
