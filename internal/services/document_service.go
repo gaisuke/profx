@@ -3,59 +3,55 @@ package services
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 
 	"github.com/gaisuke/profx/internal/models"
 	"github.com/gaisuke/profx/internal/storage"
+	"github.com/google/uuid"
 )
 
 var (
-	ErrInvalidFileType = errors.New("file must be a PDF")
+	ErrInvalidFileType = errors.New("file type must be a PDF")
 	ErrSaveFailed      = errors.New("failed to save file")
 )
 
-// DocumentService handles business logic for document operations
 type DocumentService struct {
-	storage storage.Storage
+	fileStorage storage.Storage
+	repository  *storage.DocumentRepository
 }
 
-// NewDocumentService creates a new DocumentService
-func NewDocumentService(storage storage.Storage) *DocumentService {
+func NewDocumentService(fileStorage storage.Storage, repository *storage.DocumentRepository) *DocumentService {
 	return &DocumentService{
-		storage: storage,
+		fileStorage: fileStorage,
+		repository:  repository,
 	}
 }
 
-// UploadDocuments handles the upload of CV and project report
-func (ds *DocumentService) UploadDocuments(cvFile io.Reader, cvFilename string, reportFile io.Reader, reportFilename string) (*models.UploadResponse, error) {
-	// Validate file types
-	if !isPDF(cvFilename) {
-		return nil, ErrInvalidFileType
-	}
-	if !isPDF(reportFilename) {
+func (ds *DocumentService) UploadDocuments(cvFile, reportFile io.Reader, cvFilename, reportFilename string) (*models.UploadResponse, error) {
+	if !isPDF(cvFilename) || !isPDF(reportFilename) {
 		return nil, ErrInvalidFileType
 	}
 
-	// Validate content by reading header bytes
 	if err := validatePDF(cvFile); err != nil {
 		return nil, err
 	}
+
 	if err := validatePDF(reportFile); err != nil {
 		return nil, err
 	}
 
-	// Save candidate CV
-	cvDoc, err := ds.storage.Save(cvFile, cvFilename)
+	cvDoc, err := ds.uploadDocument(cvFile, cvFilename, models.DocumentTypeCV)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to upload CV: %w", err)
 	}
 
-	// Save project report
-	reportDoc, err := ds.storage.Save(reportFile, reportFilename)
+	reportDoc, err := ds.uploadDocument(reportFile, reportFilename, models.DocumentTypeProjectReport)
 	if err != nil {
-		// Note: In production, consider cleanup of cvDoc on failure
-		return nil, err
+		ds.cleanupDocument(cvDoc)
+		return nil, fmt.Errorf("failed to upload report: %w", err)
 	}
 
 	return &models.UploadResponse{
@@ -64,12 +60,44 @@ func (ds *DocumentService) UploadDocuments(cvFile io.Reader, cvFilename string, 
 	}, nil
 }
 
+func (ds *DocumentService) uploadDocument(file io.Reader, filename string, docType models.DocumentType) (*models.Document, error) {
+	id := uuid.New().String()
+
+	doc := &models.Document{
+		ID:               id,
+		Type:             docType,
+		OriginalFilename: filename,
+	}
+
+	savedDoc, err := ds.fileStorage.Save(file, filename)
+	if err != nil {
+		return nil, ErrSaveFailed
+	}
+
+	doc.FilePath = savedDoc.FilePath
+
+	if err := ds.repository.CreateDocument(doc); err != nil {
+		os.Remove(doc.FilePath)
+		return nil, fmt.Errorf("failed to save to database: %w", err)
+	}
+
+	return doc, nil
+
+}
+
+func (ds *DocumentService) cleanupDocument(doc *models.Document) {
+	if doc.FilePath != "" {
+		os.Remove(doc.FilePath)
+	}
+
+	ds.repository.DeleteDocument(doc.ID)
+}
+
 func isPDF(filename string) bool {
 	ext := filepath.Ext(filename)
 	return ext == ".pdf" || ext == ".PDF"
 }
 
-// validatePDF reads the first 512 bytes from r to check for a PDF header.
 func validatePDF(r io.Reader) error {
 	buffer := make([]byte, 512)
 	_, err := r.Read(buffer)

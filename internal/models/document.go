@@ -1,25 +1,32 @@
 package models
 
-// UploadRequest represents the expected upload request data
+import "time"
+
+type DocumentType string
+
+const (
+	DocumentTypeCV            DocumentType = "cv"
+	DocumentTypeProjectReport DocumentType = "project_report"
+)
+
 type UploadRequest struct {
 	CandidateCV   []byte
 	ProjectReport []byte
 }
 
-// UploadResponse represents the response after successful upload
 type UploadResponse struct {
 	CandidateCVID   string `json:"candidate_cv_id"`
 	ProjectReportID string `json:"project_report_id"`
 }
 
-// ErrorResponse represents an error response
 type ErrorResponse struct {
 	Error string `json:"error"`
 }
 
-// Document represents a stored document
 type Document struct {
-	ID       string
-	Filename string
-	Path     string
+	ID               string       `json:"id" db:"id"`
+	Type             DocumentType `json:"type" db:"type"`
+	OriginalFilename string       `json:"original_filename" db:"original_filename"`
+	FilePath         string       `json:"file_path" db:"file_path"`
+	UploadedAt       *time.Time   `json:"uploaded_at" db:"uploaded_at"`
 }
