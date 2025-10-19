@@ -1,16 +1,25 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
+	"sync"
+	"syscall"
+	"time"
+
+	_ "github.com/lib/pq"
 
 	"github.com/gaisuke/profx/internal/database"
 	"github.com/gaisuke/profx/internal/handlers"
+	"github.com/gaisuke/profx/internal/llm"
+	"github.com/gaisuke/profx/internal/ragie"
 	"github.com/gaisuke/profx/internal/services"
 	"github.com/gaisuke/profx/internal/storage"
-	"github.com/go-playground/validator/v10"
+	"github.com/gaisuke/profx/internal/workers"
 	"github.com/joho/godotenv"
 )
 
@@ -24,12 +33,12 @@ func main() {
 
 	// Database configuration
 	dbConfig := database.Config{
-		Host:    getEnv("DB_HOST"),
-		Port:    getEnvAsInt("DB_PORT"),
-		User:    getEnv("DB_USER"),
-		Pass:    getEnv("DB_PASSWORD"),
-		DBName:  getEnv("DB_NAME"),
-		SSLMode: getEnv("DB_SSLMODE"),
+		Host:     	getEnv("DB_HOST", "localhost"),
+		Port:     	getEnvAsInt("DB_PORT", 5432),
+		User:     	getEnv("DB_USER"),
+		Pass:		getEnv("DB_PASSWORD"),
+		DBName:   	getEnv("DB_NAME"),
+		SSLMode:  	getEnv("DB_SSLMODE", "disable"),
 	}
 
 	// Connect to database
@@ -39,15 +48,11 @@ func main() {
 	}
 	defer db.Close()
 
-	validator := validator.New()
-
-	jobQueueSize := getEnvAsInt("JOB_QUEUE_SIZE")
-	if jobQueueSize <= 0 {
-		jobQueueSize = 100 // default queue size
-	}
+	// Initialize job queue (buffered channel)
+	jobQueueSize := getEnvAsInt("JOB_QUEUE_SIZE", 100)
 	jobQueue := make(chan string, jobQueueSize)
 
-	// Initialize storage layers
+	// Initialize repositories
 	fileStorage, err := storage.NewFileStorage(uploadDir)
 	if err != nil {
 		log.Fatal("Failed to initialize file storage:", err)
@@ -56,14 +61,37 @@ func main() {
 	documentRepo := storage.NewDocumentRepository(db)
 	jobRepo := storage.NewJobRepository(db)
 
-	// Initialize service layer
+	// Initialize AI clients
+	ragieAPIKey := getEnv("RAGIE_API_KEY", "")
+	if ragieAPIKey == "" {
+		log.Fatal("RAGIE_API_KEY environment variable is required")
+	}
+	ragieClient := ragie.NewClient(ragieAPIKey)
+
+	geminiAPIKey := getEnv("GEMINI_API_KEY", "")
+	if geminiAPIKey == "" {
+		log.Fatal("GEMINI_API_KEY environment variable is required")
+	}
+	geminiModel := getEnv("GEMINI_MODEL", "gemini-1.5-flash")
+	llmClient := llm.NewGeminiClient(geminiAPIKey, geminiModel)
+
+	// Initialize services
 	documentService := services.NewDocumentService(fileStorage, documentRepo)
+	evaluationService := services.NewEvaluationService(jobRepo, documentRepo, ragieClient, llmClient)
 	jobService := services.NewJobService(jobRepo, documentRepo, jobQueue)
 
-	// Initialize handler layer
+	// Start worker pool
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var wg sync.WaitGroup
+	numWorkers := getEnvAsInt("NUM_WORKERS", 5)
+	workers.StartWorkerPool(ctx, &wg, numWorkers, jobQueue, evaluationService)
+
+	// Initialize handlers
 	uploadHandler := handlers.NewUploadHandler(documentService)
-	evaluateHandler := handlers.NewEvaluateHandler(jobService, validator)
-	resultHandler := handlers.NewResultHandler(jobService, validator)
+	evaluateHandler := handlers.NewEvaluateHandler(jobService)
+	resultHandler := handlers.NewResultHandler(jobService)
 
 	// Register routes
 	http.Handle("/upload", uploadHandler)
@@ -71,37 +99,75 @@ func main() {
 	http.Handle("/result/", resultHandler)
 
 	// Get port from environment or use default
-	port := getEnv("SERVER_PORT")
-	if port == "" {
-		port = "8080"
+	port := getEnv("SERVER_PORT", "8080")
+
+	// Setup HTTP server
+	srv := &http.Server{
+		Addr: ":" + port,
 	}
 
-	log.Printf("Server starting on port %s...\n", port)
-	log.Printf("Upload endpoint: POST http://localhost:%s/upload\n", port)
-	log.Printf("Evaluate endpoint: POST http://localhost:%s/evaluate\n", port)
-	log.Printf("Result endpoint: GET http://localhost:%s/result/{job_id}\n", port)
+	// Handle graceful
+	// Handle graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
-	// Start server
-	if err := http.ListenAndServe(":"+port, nil); err != nil {
-		log.Fatal("Server failed to start:", err)
+	// Start server in a goroutine
+	go func() {
+		log.Printf("Server starting on port %s...\n", port)
+		log.Printf("Endpoints:\n")
+		log.Printf("  POST   http://localhost:%s/upload\n", port)
+		log.Printf("  POST   http://localhost:%s/evaluate\n", port)
+		log.Printf("  GET    http://localhost:%s/result/{id}\n", port)
+		log.Printf("Worker pool: %d workers ready\n", numWorkers)
+
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatal("Server failed to start:", err)
+		}
+	}()
+
+	// Wait for interrupt signal
+	<-sigChan
+	log.Println("\nReceived shutdown signal, gracefully shutting down...")
+
+	// Cancel context to stop workers
+	cancel()
+
+	// Close job queue (no more jobs accepted)
+	close(jobQueue)
+
+	// Shutdown HTTP server
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Printf("Server shutdown error: %v", err)
 	}
+
+	// Wait for all workers to finish
+	log.Println("Waiting for workers to finish current jobs...")
+	wg.Wait()
+
+	log.Println("All workers stopped. Shutdown complete.")
 }
 
 // Helper functions for environment variables
-func getEnv(key string) string {
+func getEnv(key, defaultValue string) string {
 	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
+	}
 	return value
 }
 
-func getEnvAsInt(key string) int {
+func getEnvAsInt(key string, defaultValue int) int {
 	valueStr := os.Getenv(key)
 	if valueStr == "" {
-		return 0
+		return defaultValue
 	}
 	value, err := strconv.Atoi(valueStr)
 	if err != nil {
-		log.Printf("Invalid integer for %s, using default: %d", key, 0)
-		return 0
+		log.Printf("Invalid integer for %s, using default: %d", key, defaultValue)
+		return defaultValue
 	}
 	return value
 }
