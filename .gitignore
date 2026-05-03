@@ -36,3 +36,6 @@ uploads/
 
 # Build artifacts
 profx-server
+
+# Vendor directory
+vendor/
