@@ -86,7 +86,7 @@ func (c *GeminiClient) generate(ctx context.Context, prompt string) (string, err
 	// Configure generation parameters
 	generateOpts := &genai.GenerateContentConfig{
 		Temperature:     ptrFloat32(0.2), // Low temperature for consistency
-		MaxOutputTokens: ptrInt(2048),
+		MaxOutputTokens: int32(2048),
 	}
 
 	// Generate content
@@ -144,20 +144,15 @@ func ptrFloat32(f float32) *float32 {
 	return &f
 }
 
-// Helper function to create pointer to int
-func ptrInt(i int) *int {
-	return &i
-}
-
 // ParseJSONResponse extracts and parses JSON from LLM response
 func ParseJSONResponse(response string, target interface{}) error {
 	// LLM might wrap JSON in markdown code blocks, clean it
 	cleaned := cleanJSONResponse(response)
-	
+
 	if err := json.Unmarshal([]byte(cleaned), target); err != nil {
 		return fmt.Errorf("failed to parse JSON: %w (cleaned response: %s)", err, cleaned)
 	}
-	
+
 	return nil
 }
 

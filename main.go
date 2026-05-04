@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-playground/validator/v10"
 	_ "github.com/lib/pq"
 
 	"github.com/gaisuke/profx/internal/database"
@@ -33,12 +34,12 @@ func main() {
 
 	// Database configuration
 	dbConfig := database.Config{
-		Host:     	getEnv("DB_HOST", "localhost"),
-		Port:     	getEnvAsInt("DB_PORT", 5432),
-		User:     	getEnv("DB_USER"),
-		Pass:		getEnv("DB_PASSWORD"),
-		DBName:   	getEnv("DB_NAME"),
-		SSLMode:  	getEnv("DB_SSLMODE", "disable"),
+		Host:    getEnv("DB_HOST", "localhost"),
+		Port:    getEnvAsInt("DB_PORT", 5432),
+		User:    getEnv("DB_USER", ""),
+		Pass:    getEnv("DB_PASSWORD", ""),
+		DBName:  getEnv("DB_NAME", ""),
+		SSLMode: getEnv("DB_SSLMODE", "disable"),
 	}
 
 	// Connect to database
@@ -73,7 +74,10 @@ func main() {
 		log.Fatal("GEMINI_API_KEY environment variable is required")
 	}
 	geminiModel := getEnv("GEMINI_MODEL", "gemini-1.5-flash")
-	llmClient := llm.NewGeminiClient(geminiAPIKey, geminiModel)
+	llmClient, err := llm.NewGeminiClient(context.Background(), geminiAPIKey, geminiModel)
+	if err != nil {
+		log.Fatal("Failed to initialize Gemini client:", err)
+	}
 
 	// Initialize services
 	documentService := services.NewDocumentService(fileStorage, documentRepo)
@@ -88,10 +92,13 @@ func main() {
 	numWorkers := getEnvAsInt("NUM_WORKERS", 5)
 	workers.StartWorkerPool(ctx, &wg, numWorkers, jobQueue, evaluationService)
 
+	// Initialize request validator
+	validate := validator.New()
+
 	// Initialize handlers
 	uploadHandler := handlers.NewUploadHandler(documentService)
-	evaluateHandler := handlers.NewEvaluateHandler(jobService)
-	resultHandler := handlers.NewResultHandler(jobService)
+	evaluateHandler := handlers.NewEvaluateHandler(jobService, validate)
+	resultHandler := handlers.NewResultHandler(jobService, validate)
 
 	// Register routes
 	http.Handle("/upload", uploadHandler)
