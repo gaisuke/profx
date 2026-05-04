@@ -62,7 +62,8 @@ func (es *EvaluationService) EvaluateJob(ctx context.Context, jobID string) erro
 	}
 
 	// Update status to processing
-	if err := es.jobRepo.UpdateStatus(jobID, models.JobStatusProcessing); err != nil {
+	job.Status = models.JobStatusProcessing
+	if err := es.jobRepo.UpdateStatus(job); err != nil {
 		log.Printf("[Job %s] Failed to update status to processing: %v", jobID, err)
 	}
 
