@@ -86,7 +86,7 @@ func (c *GeminiClient) generate(ctx context.Context, prompt string) (string, err
 	// Configure generation parameters
 	generateOpts := &genai.GenerateContentConfig{
 		Temperature:     ptrFloat32(0.2), // Low temperature for consistency
-		MaxOutputTokens: int32(2048),
+		MaxOutputTokens: int32(8192),
 	}
 
 	// Generate content
@@ -146,8 +146,11 @@ func ptrFloat32(f float32) *float32 {
 
 // ParseJSONResponse extracts and parses JSON from LLM response
 func ParseJSONResponse(response string, target interface{}) error {
-	// LLM might wrap JSON in markdown code blocks, clean it
 	cleaned := cleanJSONResponse(response)
+
+	if !json.Valid([]byte(cleaned)) {
+		return fmt.Errorf("invalid JSON after cleaning (likely truncated model output): %s", cleaned)
+	}
 
 	if err := json.Unmarshal([]byte(cleaned), target); err != nil {
 		return fmt.Errorf("failed to parse JSON: %w (cleaned response: %s)", err, cleaned)
@@ -158,23 +161,27 @@ func ParseJSONResponse(response string, target interface{}) error {
 
 func cleanJSONResponse(response string) string {
 	response = strings.TrimSpace(response)
+	return extractJSONObject(response)
+}
 
-	// Remove markdown code blocks (```json ... ``` or ``` ... ```)
-	if strings.HasPrefix(response, "```") {
-		// Find the start of JSON (first { or [)
-		startIdx := strings.IndexAny(response, "{[")
-		if startIdx == -1 {
-			return response
-		}
-
-		// Find the end (last } or ])
-		endIdx := strings.LastIndexAny(response, "}]")
-		if endIdx == -1 {
-			return response
-		}
-
-		response = response[startIdx : endIdx+1]
+func extractJSONObject(input string) string {
+	start := strings.Index(input, "{")
+	if start == -1 {
+		return input
 	}
 
-	return strings.TrimSpace(response)
+	count := 0
+	for i := start; i < len(input); i++ {
+		switch input[i] {
+		case '{':
+			count++
+		case '}':
+			count--
+			if count == 0 {
+				return input[start : i+1]
+			}
+		}
+	}
+
+	return input
 }
