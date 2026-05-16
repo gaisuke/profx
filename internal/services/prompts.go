@@ -33,7 +33,7 @@ func buildCVEvaluationPrompt(context, cvContent, jobTitle string) string {
 	- Do not assume specific skills or requirements beyond what's stated in the CONTEXT
 	- Weight each criterion according to what's specified in the rubric
 
-	OUTPUT FORMAT (strict JSON only, no extra text):
+	OUTPUT FORMAT (Return ONLY valid JSON; Do not wrap in markdown; Do not include explanation; Do not add commentary; Ensure the JSON is complete and properly closed.):
 	{
 		"cv_match_rate": 0.85,
 		"cv_feedback": "..." // Detailed analysis highlighting strengths and gaps in 3-5 sentences, referencing from the job description
@@ -60,7 +60,7 @@ func buildProjectEvaluationPrompt(context, reportContent string) string {
 	- If specific evaluation dimensions are mentioned (e.g., correctness, code quality, documentation), evaluate each one
 	- Do not impose criteria that aren't in the rubric
 
-	OUTPUT FORMAT (strict JSON only, no extra text):
+	OUTPUT FORMAT (Return ONLY valid JSON; Do not wrap in markdown; Do not include explanation; Do not add commentary; Ensure the JSON is complete and properly closed.):
 	{
 		"project_score": 4.2,
 		"project_feedback": "..." // Strengths: ... , Areas for improvement: ... in 3-5 sentences, referencing criteria from the rubric
@@ -87,14 +87,14 @@ func buildFinalSummaryPrompt(cvResult *CVEvaluationResult, projectResult *Projec
 	3. Identifies 1-2 notable development areas or gaps
 	4. Offers a clear, actionable hiring recommendation (e.g., "Strong hire", "Hire with reservations", "Not receommended at this time")
 
-	OUTPUT FORMAT (strict JSON only, no extra text):
+	OUTPUT FORMAT (Return ONLY valid JSON; Do not wrap in markdown; Do not include explanation; Do not add commentary; Ensure the JSON is complete and properly closed.):
 	{
 		"overall_summary": "..." // Candidate demonstrates... Strengths include... Areas for development... Recommendation:...
 	}
 	
 	Be concise, balanced, and decision-oriented. Synthesize insights from both evaluations into a cohesive assessment.`,
-	cvResult.CVMatchRate,
-	cvResult.CVFeedback,
-	projectResult.ProjectScore,
-	projectResult.ProjectFeedback)
+		cvResult.CVMatchRate,
+		cvResult.CVFeedback,
+		projectResult.ProjectScore,
+		projectResult.ProjectFeedback)
 }

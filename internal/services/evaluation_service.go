@@ -10,6 +10,7 @@ import (
 	"github.com/gaisuke/profx/internal/models"
 	"github.com/gaisuke/profx/internal/ragie"
 	"github.com/gaisuke/profx/internal/storage"
+	"github.com/gaisuke/profx/internal/utils"
 	"github.com/ledongthuc/pdf"
 )
 
@@ -105,11 +106,12 @@ func (es *EvaluationService) EvaluateJob(ctx context.Context, jobID string) erro
 	}
 
 	// Update job with results
-	job.CVMatchRate = sql.NullFloat64{Float64: cvResult.CVMatchRate, Valid: true}
+	job.CVMatchRate = sql.NullFloat64{Float64: utils.NormalizeScore(cvResult.CVMatchRate), Valid: true}
 	job.CVFeedback = sql.NullString{String: cvResult.CVFeedback, Valid: true}
-	job.ProjectScore = sql.NullFloat64{Float64: projectResult.ProjectScore, Valid: true}
+	job.ProjectScore = sql.NullFloat64{Float64: utils.NormalizeScore(projectResult.ProjectScore), Valid: true}
 	job.ProjectFeedback = sql.NullString{String: projectResult.ProjectFeedback, Valid: true}
 	job.OverallSummary = sql.NullString{String: summary.OverallSummary, Valid: true}
+	job.Status = models.JobStatusCompleted
 
 	if err := es.jobRepo.UpdateResult(job); err != nil {
 		return fmt.Errorf("failed to update job result: %w", err)

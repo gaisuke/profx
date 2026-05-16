@@ -26,3 +26,11 @@ func ReadPDFContent(filepath string) (string, error) {
 
 	return buf.String(), nil
 }
+
+func NormalizeScore(val float64) float64 {
+	// If model returns 0-100 scale
+	if val > 1 {
+		return val / 100
+	}
+	return val
+}
