@@ -63,11 +63,16 @@ func main() {
 	jobRepo := storage.NewJobRepository(db)
 
 	// Initialize AI clients
+	// Retrieval is optional: without a key the service still runs, and every
+	// evaluation records that it ran without rubric context.
 	ragieAPIKey := getEnv("RAGIE_API_KEY", "")
+	var retriever services.Retriever
 	if ragieAPIKey == "" {
-		log.Fatal("RAGIE_API_KEY environment variable is required")
+		log.Printf("RAGIE_API_KEY is not set: rubric retrieval disabled, evaluations run without rubric context")
+		retriever = ragie.NoopClient{}
+	} else {
+		retriever = ragie.NewClient(ragieAPIKey)
 	}
-	ragieClient := ragie.NewClient(ragieAPIKey)
 
 	// Initialize the LLM client. LLM_PROVIDER picks the provider; both implement
 	// the same interface, so the evaluation pipeline is provider-agnostic.
@@ -104,7 +109,7 @@ func main() {
 
 	// Initialize services
 	documentService := services.NewDocumentService(fileStorage, documentRepo)
-	evaluationService := services.NewEvaluationService(jobRepo, documentRepo, ragieClient, llmClient)
+	evaluationService := services.NewEvaluationService(jobRepo, documentRepo, retriever, llmClient)
 	jobService := services.NewJobService(jobRepo, documentRepo, jobQueue)
 
 	// Start worker pool

@@ -210,3 +210,38 @@ pipeline is provider-agnostic:
   `https://opencode.ai/zen/go/v1/messages`. The gateway sits behind Cloudflare
   (a browser `User-Agent` is required) and demands a session header.
 - `gemini` — Google Gen AI SDK.
+
+## Deployment
+
+Runs as a systemd unit with its own database and its own env file:
+
+```bash
+sudo -u postgres psql -c "CREATE ROLE profx LOGIN"
+sudo -u postgres psql -c "CREATE DATABASE profx OWNER profx"
+psql "host=127.0.0.1 user=profx dbname=profx" \
+  -f migrations/000001_create_documents_table.up.sql \
+  -f migrations/000002_create_evaluation_jobs_table.up.sql \
+  -f migrations/000003_widen_project_score_range.up.sql   # in order
+go build -o profx . && sudo install -m 755 profx /usr/local/bin/profx
+sudo install -m 600 -o root -g root deploy/profx.env /etc/profx.env   # secrets, root-only
+sudo install -m 644 deploy/profx.service /etc/systemd/system/profx.service
+sudo systemctl daemon-reload && sudo systemctl enable --now profx
+```
+
+The unit runs with `WorkingDirectory=/var/lib/profx` (uploads land in
+`/var/lib/profx/uploads`), `ProtectSystem=strict` and `ReadWritePaths=/var/lib/profx`.
+The server listens on `SERVER_PORT` (8779 on this host) and is bound to localhost;
+exposing it publicly needs a reverse proxy plus authentication.
+
+`RAGIE_API_KEY` is optional: without it the service still starts and every
+evaluation is produced without rubric context. The prompt then tells the model not
+to invent criteria and to prefix its feedback with `RUBRIC UNAVAILABLE:`, so a
+reviewer can see the score was made without the rubric.
+
+### Score scales (do not "fix" these again)
+
+- `cv_match_rate` is 0.00-1.00.
+- `project_score` is on the rubric's own scale, **1.00-5.00**, and the database
+  CHECK constraint was widened in migration 000003 to match. An earlier shared
+  normaliser divided any score above 1 by 100 so a 4.2 could satisfy a 0-1
+  constraint; that stored 0.042 and silently corrupted results.

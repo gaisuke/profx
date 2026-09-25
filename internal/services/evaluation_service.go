@@ -151,7 +151,7 @@ func (es *EvaluationService) evaluateCVText(ctx context.Context, jobTitle, cvCon
 		return nil, fmt.Errorf("failed to parse CV evaluation response: %w", err)
 	}
 	if err := validateCVResult(&result); err != nil {
-		return nil, fmt.Errorf("invalid CV result: %w", err)
+		return nil, fmt.Errorf("invalid CV result: %w (model reply: %s)", err, truncate(response))
 	}
 	return &result, nil
 }
@@ -183,9 +183,19 @@ func (es *EvaluationService) evaluateProjectText(ctx context.Context, reportCont
 		return nil, fmt.Errorf("failed to parse project evaluation response: %w", err)
 	}
 	if err := validateProjectResult(&result); err != nil {
-		return nil, fmt.Errorf("invalid project result: %w", err)
+		return nil, fmt.Errorf("invalid project result: %w (model reply: %s)", err, truncate(response))
 	}
 	return &result, nil
+}
+
+// truncate keeps error messages readable while still showing what the model
+// actually replied — a validation failure is undebuggable otherwise.
+func truncate(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) > 300 {
+		return s[:300] + "..."
+	}
+	return s
 }
 
 // Retrieval attempts before scoring without a rubric, and the placeholder used

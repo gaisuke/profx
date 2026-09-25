@@ -2,7 +2,23 @@ package services
 
 import (
 	"fmt"
+	"strings"
 )
+
+// degradedNotice is injected when no rubric could be retrieved. Without it the
+// model correctly refuses to invent criteria and answers with a zero score,
+// which then fails validation with a message that explains nothing. Telling the
+// model what to do instead keeps the evaluation usable — and honest, because the
+// reviewer is told the rubric was missing.
+const degradedNotice = `NOTE: the evaluation criteria could not be retrieved for this case.
+Do NOT invent job requirements or rubric weights. Evaluate only against the general criteria stated in the TASK below, and begin your feedback text with "RUBRIC UNAVAILABLE:" so a reviewer knows the score was produced without the rubric.`
+
+// rubricAvailable reports whether the retrieved context is real criteria rather
+// than the placeholder used when retrieval failed.
+func rubricAvailable(context string) bool {
+	context = strings.TrimSpace(context)
+	return context != "" && context != fallbackContext
+}
 
 func buildCVEvaluationPrompt(context, cvContent, jobTitle string) string {
 	return fmt.Sprintf(`You are an expert technical recruiter evaluating a candidate's CV for a %s position.
@@ -39,7 +55,19 @@ func buildCVEvaluationPrompt(context, cvContent, jobTitle string) string {
 		"cv_feedback": "..." // Detailed analysis highlighting strengths and gaps in 3-5 sentences, referencing from the job description
 	}
 
-	Be objective, specific, and constructive. Focus on concrete evidence from the CV against the actual job requirements.`, jobTitle, context, cvContent)
+	Be objective, specific, and constructive. Focus on concrete evidence from the CV against the actual job requirements.`,
+		jobTitle, withNotice(context), cvContent)
+}
+
+// withNotice prepends the degraded instruction to the rubric context when
+// retrieval produced nothing. Keeping it inside the context string avoids a
+// separate format placeholder — which is where the first version of this change
+// broke the argument count.
+func withNotice(context string) string {
+	if rubricAvailable(context) {
+		return context
+	}
+	return degradedNotice + "\n\n" + context
 }
 
 func buildProjectEvaluationPrompt(context, reportContent string) string {
@@ -53,6 +81,8 @@ func buildProjectEvaluationPrompt(context, reportContent string) string {
 
 	TASK:
 	Evaluate the project submission based STRICTLY on the criteria provided in the EVALUATION CRITERIA section above.
+	If no criteria were provided, still return a score on the 1-5 scale described below, based on the general quality
+	of the submission (problem framing, technical depth, evidence, communication).
 
 	IMPORTANT:
 	- Use ONLY the scoring criteria and weights specified in the rubric above
@@ -66,7 +96,8 @@ func buildProjectEvaluationPrompt(context, reportContent string) string {
 		"project_feedback": "..." // Strengths: ... , Areas for improvement: ... in 3-5 sentences, referencing criteria from the rubric
 	}
 
-	Provide actionable, specific feedback based on the actual evaluation criteria provided.`, context, reportContent)
+	Provide actionable, specific feedback based on the actual evaluation criteria provided.`,
+		withNotice(context), reportContent)
 }
 
 func buildFinalSummaryPrompt(cvResult *CVEvaluationResult, projectResult *ProjectEvaluationResult) string {

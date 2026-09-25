@@ -38,10 +38,11 @@ func NormalizeMatchRate(val float64) float64 {
 // NormalizeProjectScore keeps the rubric's own scale.
 //
 // The earlier shared NormalizeScore divided ANY value above 1 by 100, so a
-// perfectly valid project score of 4.2 was stored as 0.042 — every project
-// result in the database was corrupted. Scores are validated against the
-// rubric's 1-5 band before they get here; this only clamps absurd input and
-// never rescales a legitimate value.
+// legitimate project score of 4.2 was stored as 0.042. That hack existed to
+// satisfy a database CHECK constraint that only allowed 0.00-1.00 while the
+// prompt and validator both used the rubric's 1-5 scale; migration 000003
+// widens the constraint, so the stored number now means what the rubric says.
+// This function only clamps absurd input and never rescales a valid value.
 func NormalizeProjectScore(val float64) float64 {
 	if math.IsNaN(val) {
 		return 1

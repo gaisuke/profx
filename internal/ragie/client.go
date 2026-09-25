@@ -3,6 +3,7 @@ package ragie
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -119,3 +120,15 @@ func chunksToContext(chunks []Chunk) string {
 	}
 	return context
 }
+
+// ErrNotConfigured is returned by NoopClient when no RAGIE_API_KEY is set.
+var ErrNotConfigured = errors.New("ragie: no API key configured")
+
+// NoopClient answers every retrieval with ErrNotConfigured. It lets the service
+// start and keep evaluating when retrieval is not configured: the pipeline marks
+// those results as running without rubric context instead of refusing to boot.
+type NoopClient struct{}
+
+func (NoopClient) RetrieveForCV(string) (string, error) { return "", ErrNotConfigured }
+
+func (NoopClient) RetrieveForProject() (string, error) { return "", ErrNotConfigured }

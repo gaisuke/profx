@@ -55,3 +55,31 @@ func TestBuildFinalSummaryPromptFeedsBothStagesForward(t *testing.T) {
 		}
 	}
 }
+
+// When retrieval is unavailable the prompt must tell the model what to do.
+// Without this the model (correctly) refuses to invent criteria, answers with a
+// zero score, and the job dies on validation with a message that explains
+// nothing — which is exactly what happened on the first deployment.
+func TestDegradedPromptTellsTheModelWhatToDo(t *testing.T) {
+	cv := buildCVEvaluationPrompt(fallbackContext, "CV TEXT", "Backend Engineer")
+	if !strings.Contains(cv, "RUBRIC UNAVAILABLE") || !strings.Contains(cv, "Do NOT invent") {
+		t.Error("degraded CV prompt must instruct the model not to invent criteria and to say so")
+	}
+	proj := buildProjectEvaluationPrompt(fallbackContext, "REPORT TEXT")
+	if !strings.Contains(proj, "RUBRIC UNAVAILABLE") {
+		t.Error("degraded project prompt must say the rubric is missing")
+	}
+	if !strings.Contains(proj, "still return a score on the 1-5 scale") {
+		t.Error("degraded project prompt must ask for a score on the rubric scale")
+	}
+}
+
+func TestHealthyPromptCarriesNoDegradedNotice(t *testing.T) {
+	cv := buildCVEvaluationPrompt(rubricFixture, "CV TEXT", "Backend Engineer")
+	if strings.Contains(cv, "RUBRIC UNAVAILABLE") {
+		t.Error("a prompt with a real rubric must not claim the rubric is missing")
+	}
+	if !rubricAvailable(rubricFixture) || rubricAvailable(fallbackContext) {
+		t.Error("rubricAvailable must distinguish real criteria from the placeholder")
+	}
+}
