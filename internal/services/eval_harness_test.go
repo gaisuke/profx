@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -110,8 +111,8 @@ func TestEvalHarness(t *testing.T) {
 		// The harness needs a real provider key; keep it out of ordinary runs.
 		t.Skip("set EVAL_ENABLE=1 to run the evaluation harness")
 	}
-	casesDir := evalEnv("EVAL_CASES", filepath.Join("..", "..", "eval", "cases"))
-	outDir := evalEnv("EVAL_OUT", filepath.Join("..", "..", "eval", "out"))
+	casesDir := evalPath("EVAL_CASES", "eval/cases")
+	outDir := evalPath("EVAL_OUT", "eval/out")
 	repeats := evalEnvInt("EVAL_REPEAT", 1)
 	stub := os.Getenv("EVAL_STUB") == "1"
 
@@ -382,6 +383,26 @@ func abs(v float64) float64 {
 		return -v
 	}
 	return v
+}
+
+// repoRoot is the module root. Tests run with the package directory as their
+// working directory, so a relative EVAL_OUT used to land inside
+// internal/services/eval/out instead of the repository's eval/out.
+func repoRoot() string {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		return "."
+	}
+	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
+}
+
+// evalPath resolves a harness path, absolute or relative to the module root.
+func evalPath(envKey, fallback string) string {
+	p := evalEnv(envKey, fallback)
+	if filepath.IsAbs(p) {
+		return p
+	}
+	return filepath.Join(repoRoot(), p)
 }
 
 func evalEnv(key, fallback string) string {
