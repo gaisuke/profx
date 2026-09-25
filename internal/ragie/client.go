@@ -13,6 +13,9 @@ import (
 )
 
 const (
+	// ragieBaseURL is the default provider. RAGIE_BASE_URL points the client at
+	// any service that speaks the same two endpoints, which is how the pipeline
+	// switched to the self-hosted corpus without touching the pipeline itself.
 	ragieBaseURL = "https://api.ragie.ai"
 
 	// retrievePath is the documented endpoint. Ragie's retrieval API lives at
@@ -91,12 +94,18 @@ func NewClientWithFilters(apiKey string, cfg FilterConfig) *Client {
 	}
 }
 
-// WithBaseURL points the client at another host. Used by tests to assert the
-// exact request shape against a stub server.
+// WithBaseURL points the client at another host. Tests use it to assert the
+// exact request shape against a stub server; production uses it to read from a
+// self-hosted corpus instead of the hosted provider.
 func (c *Client) WithBaseURL(baseURL string) *Client {
-	c.baseURL = baseURL
+	if baseURL != "" {
+		c.baseURL = strings.TrimSuffix(baseURL, "/")
+	}
 	return c
 }
+
+// BaseURL reports where this client is pointed, for diagnostics.
+func (c *Client) BaseURL() string { return c.baseURL }
 
 type RetrievalRequest struct {
 	Query  string         `json:"query"`
@@ -294,3 +303,6 @@ func (NoopClient) FilterConfigInfo() (string, []string, []string) {
 	cfg := DefaultFilterConfig()
 	return cfg.Key, cfg.CVValues, cfg.ProjectValues
 }
+
+// BaseURL reports that no host is configured.
+func (NoopClient) BaseURL() string { return "" }

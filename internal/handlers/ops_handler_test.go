@@ -25,6 +25,8 @@ func (s stubRetriever) FilterConfigInfo() (string, []string, []string) {
 	return "type", []string{"job_desc", "cv_rubric"}, []string{"case_brief", "project_rubric"}
 }
 
+func (s stubRetriever) BaseURL() string { return "http://127.0.0.1:8780" }
+
 func get(t *testing.T, h http.Handler, path string) (int, map[string]any) {
 	t.Helper()
 	rec := httptest.NewRecorder()

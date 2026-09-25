@@ -15,6 +15,7 @@ type RetrieverDiagnostics interface {
 	RetrieveForCV(jobTitle string) (string, error)
 	Documents() ([]ragie.Document, error)
 	FilterConfigInfo() (key string, cvValues, projectValues []string)
+	BaseURL() string
 }
 
 // OpsHandler serves the deployment's self-checks:
@@ -61,6 +62,7 @@ func (h *OpsHandler) health(w http.ResponseWriter) {
 		"ragie": map[string]any{
 			"configured": docsErr == nil,
 			"filter_key": key,
+			"base_url":   h.retriever.BaseURL(),
 			"detail":     errString(docsErr),
 		},
 	})

@@ -192,7 +192,7 @@ async function loadHealth() {
     const r = h.ragie || {};
     const chip = r.configured ? '<span class="chip ok">reachable</span>' : '<span class="chip bad">unreachable</span>';
     box.innerHTML = `<p class="h-meta">LLM provider: <b>${escapeHtml(h.provider || '—')}</b></p>
-      <p class="h-meta">Ragie corpus: ${chip}</p>
+      <p class="h-meta">Retrieval corpus: ${chip}${r.base_url ? ' <code>' + escapeHtml(r.base_url) + '</code>' : ''}</p>
       <p class="h-meta">Filter key: <code>${escapeHtml(r.filter_key || '—')}</code></p>
       ${r.configured ? '' : `<p class="h-meta">${escapeHtml(r.detail || '')}</p>`}`;
   } catch (err) {

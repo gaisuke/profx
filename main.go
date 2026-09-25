@@ -65,19 +65,23 @@ func main() {
 	// Initialize AI clients
 	// Retrieval is optional: without a key the service still runs, and every
 	// evaluation records that it ran without rubric context.
+	// Retrieval is enabled by either a hosted API key or a self-hosted base URL:
+	// a corpus on this box needs no key, and refusing to run without one would
+	// make the self-hosted path unusable.
 	ragieAPIKey := getEnv("RAGIE_API_KEY", "")
+	ragieBase := getEnv("RAGIE_BASE_URL", "")
 	var retriever services.Retriever
 	var retrieverDiagnostics handlers.RetrieverDiagnostics
-	if ragieAPIKey == "" {
-		log.Printf("RAGIE_API_KEY is not set: rubric retrieval disabled, evaluations run without rubric context")
+	if ragieAPIKey == "" && ragieBase == "" {
+		log.Printf("no RAGIE_API_KEY or RAGIE_BASE_URL: rubric retrieval disabled, evaluations run without rubric context")
 		noop := ragie.NoopClient{}
 		retriever = noop
 		retrieverDiagnostics = noop
 	} else {
-		client := ragie.NewClient(ragieAPIKey)
+		client := ragie.NewClient(ragieAPIKey).WithBaseURL(ragieBase)
 		retriever = client
 		retrieverDiagnostics = client
-		log.Printf("Ragie retrieval enabled (filter key %q)", getEnv("RAGIE_FILTER_KEY", "type"))
+		log.Printf("Retrieval enabled: %s (filter key %q)", client.BaseURL(), getEnv("RAGIE_FILTER_KEY", "type"))
 	}
 
 	// Initialize the LLM client. LLM_PROVIDER picks the provider; both implement
