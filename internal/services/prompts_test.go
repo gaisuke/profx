@@ -1,6 +1,7 @@
 package services
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
@@ -61,11 +62,12 @@ func TestBuildFinalSummaryPromptFeedsBothStagesForward(t *testing.T) {
 // zero score, and the job dies on validation with a message that explains
 // nothing — which is exactly what happened on the first deployment.
 func TestDegradedPromptTellsTheModelWhatToDo(t *testing.T) {
-	cv := buildCVEvaluationPrompt(fallbackContext, "CV TEXT", "Backend Engineer")
+	degraded := degradedContext("CV", errors.New("retrieval matched no chunks"))
+	cv := buildCVEvaluationPrompt(degraded, "CV TEXT", "Backend Engineer")
 	if !strings.Contains(cv, "RUBRIC UNAVAILABLE") || !strings.Contains(cv, "Do NOT invent") {
 		t.Error("degraded CV prompt must instruct the model not to invent criteria and to say so")
 	}
-	proj := buildProjectEvaluationPrompt(fallbackContext, "REPORT TEXT")
+	proj := buildProjectEvaluationPrompt(degraded, "REPORT TEXT")
 	if !strings.Contains(proj, "RUBRIC UNAVAILABLE") {
 		t.Error("degraded project prompt must say the rubric is missing")
 	}
@@ -79,7 +81,11 @@ func TestHealthyPromptCarriesNoDegradedNotice(t *testing.T) {
 	if strings.Contains(cv, "RUBRIC UNAVAILABLE") {
 		t.Error("a prompt with a real rubric must not claim the rubric is missing")
 	}
-	if !rubricAvailable(rubricFixture) || rubricAvailable(fallbackContext) {
-		t.Error("rubricAvailable must distinguish real criteria from the placeholder")
+	degraded := degradedContext("CV", errors.New("retrieval matched no chunks"))
+	if !rubricAvailable(rubricFixture) || rubricAvailable(degraded) {
+		t.Error("rubricAvailable must distinguish real criteria from a degraded context")
+	}
+	if !strings.Contains(degraded, "matched no chunks") {
+		t.Error("a degraded context must carry why retrieval failed")
 	}
 }

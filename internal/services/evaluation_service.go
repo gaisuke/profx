@@ -135,11 +135,11 @@ func (es *EvaluationService) evaluateCV(ctx context.Context, jobTitle, cvFilePat
 
 // evaluateCVText runs the CV stage: rubric context, prompt, model call, parse, validate.
 func (es *EvaluationService) evaluateCVText(ctx context.Context, jobTitle, cvContent string) (*CVEvaluationResult, error) {
-	context, degraded := retrieveWithRetry(func() (string, error) {
+	context, degradedErr := retrieveWithRetry(func() (string, error) {
 		return es.ragieClient.RetrieveForCV(jobTitle)
 	}, "CV")
-	if degraded {
-		log.Printf("Warning: CV rubric unavailable; scoring the CV without rubric context")
+	if degradedErr != nil {
+		log.Printf("Warning: scoring the CV without rubric context: %v", degradedErr)
 	}
 	prompt := buildCVEvaluationPrompt(context, cvContent, jobTitle)
 	response, err := es.llmClient.Generate(ctx, prompt)
@@ -167,11 +167,11 @@ func (es *EvaluationService) evaluateProject(ctx context.Context, reportFilePath
 
 // evaluateProjectText runs the project stage: rubric context, prompt, model call, parse, validate.
 func (es *EvaluationService) evaluateProjectText(ctx context.Context, reportContent string) (*ProjectEvaluationResult, error) {
-	context, degraded := retrieveWithRetry(func() (string, error) {
+	context, degradedErr := retrieveWithRetry(func() (string, error) {
 		return es.ragieClient.RetrieveForProject()
 	}, "project")
-	if degraded {
-		log.Printf("Warning: project rubric unavailable; scoring the report without rubric context")
+	if degradedErr != nil {
+		log.Printf("Warning: scoring the report without rubric context: %v", degradedErr)
 	}
 	prompt := buildProjectEvaluationPrompt(context, reportContent)
 	response, err := es.llmClient.Generate(ctx, prompt)
@@ -198,17 +198,28 @@ func truncate(s string) string {
 	return s
 }
 
-// Retrieval attempts before scoring without a rubric, and the placeholder used
-// when it never arrives. A transient retrieval failure used to score the
-// candidate with no criteria at all, silently.
+// Retrieval attempts before scoring without a rubric, and the stand-in context
+// used when the rubric never arrives. A transient retrieval failure used to
+// score the candidate with no criteria at all, silently.
 const (
 	retrievalAttempts = 3
-	fallbackContext   = "No additional context available."
+	// fallbackContext is the body of a degraded context: what the model is told
+	// when no rubric could be retrieved.
+	fallbackContext = "No rubric context is available for this evaluation."
 )
 
-// retrieveWithRetry fetches the rubric context, retrying transient failures. It
-// reports whether the caller is now running degraded (no rubric).
-func retrieveWithRetry(fetch func() (string, error), label string) (string, bool) {
+// degradedContext stands in for the missing rubric. It keeps the RUBRIC
+// UNAVAILABLE prefix (which withNotice keys on) and carries why retrieval
+// failed: "no chunks matched the filter" and "401 invalid api key" are very
+// different problems, and both are invisible if the context only says "none".
+func degradedContext(label string, err error) string {
+	return fmt.Sprintf("%s (%s retrieval failed: %v). %s", degradedPrefix, label, err, fallbackContext)
+}
+
+// retrieveWithRetry fetches the rubric context, retrying transient failures. A
+// non-nil error means the caller is running degraded; the returned context is
+// then the stand-in carrying that error's reason.
+func retrieveWithRetry(fetch func() (string, error), label string) (string, error) {
 	var lastErr error
 	for attempt := 0; attempt < retrievalAttempts; attempt++ {
 		if attempt > 0 {
@@ -219,13 +230,13 @@ func retrieveWithRetry(fetch func() (string, error), label string) (string, bool
 		case err != nil:
 			lastErr = err
 		case strings.TrimSpace(text) == "":
-			lastErr = fmt.Errorf("empty %s context", label)
+			lastErr = fmt.Errorf("retrieval returned an empty %s context", label)
 		default:
-			return text, false
+			return text, nil
 		}
 	}
 	log.Printf("Warning: failed to retrieve %s context after %d attempts: %v", label, retrievalAttempts, lastErr)
-	return fallbackContext, true
+	return degradedContext(label, lastErr), lastErr
 }
 
 // generateSummary creates final overall summary

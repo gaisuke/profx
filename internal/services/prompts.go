@@ -13,11 +13,16 @@ import (
 const degradedNotice = `NOTE: the evaluation criteria could not be retrieved for this case.
 Do NOT invent job requirements or rubric weights. Evaluate only against the general criteria stated in the TASK below, and begin your feedback text with "RUBRIC UNAVAILABLE:" so a reviewer knows the score was produced without the rubric.`
 
+// degradedPrefix marks context that stands in for criteria we could not
+// retrieve. Matching on the prefix (not on a fixed placeholder string) lets the
+// degraded context carry the reason retrieval failed.
+const degradedPrefix = "RUBRIC UNAVAILABLE"
+
 // rubricAvailable reports whether the retrieved context is real criteria rather
-// than the placeholder used when retrieval failed.
+// than the stand-in used when retrieval failed.
 func rubricAvailable(context string) bool {
 	context = strings.TrimSpace(context)
-	return context != "" && context != fallbackContext
+	return context != "" && !strings.HasPrefix(strings.ToUpper(context), degradedPrefix)
 }
 
 func buildCVEvaluationPrompt(context, cvContent, jobTitle string) string {
