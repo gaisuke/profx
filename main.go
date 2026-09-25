@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -148,12 +149,16 @@ func main() {
 	http.Handle("/healthz", opsHandler)
 	http.Handle("/retrieval-check", opsHandler)
 
-	// Get port from environment or use default
+	// Get port from environment or use default. The bind address defaults to
+	// loopback: this API takes CVs and has no authentication of its own, so it
+	// must only be reachable through the reverse proxy that wraps it in basic
+	// auth. SERVER_ADDR exists for the case where something else fronts it.
 	port := getEnv("SERVER_PORT", "8080")
+	addr := getEnv("SERVER_ADDR", "127.0.0.1")
 
 	// Setup HTTP server
 	srv := &http.Server{
-		Addr: ":" + port,
+		Addr: net.JoinHostPort(addr, port),
 	}
 
 	// Handle graceful
