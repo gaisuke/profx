@@ -2,8 +2,8 @@ package workers
 
 import (
 	"context"
-	"sync"
 	"log"
+	"sync"
 
 	"github.com/gaisuke/profx/internal/services"
 )

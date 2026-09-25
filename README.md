@@ -238,6 +238,43 @@ evaluation is produced without rubric context. The prompt then tells the model n
 to invent criteria and to prefix its feedback with `RUBRIC UNAVAILABLE:`, so a
 reviewer can see the score was made without the rubric.
 
+### Health and diagnostics
+
+```
+GET /healthz          # liveness + which integrations are wired (provider, ragie)
+GET /retrieval-check  # one live retrieval, plus the corpus metadata and how
+                      # many documents each configured filter actually matches
+```
+
+`/retrieval-check` exists because a filter mismatch is otherwise invisible:
+retrieval answers 200 with an empty result, the pipeline scores without a rubric,
+and the only symptom is softer feedback. The check prints the corpus's real
+metadata values next to the filter being sent, so the mismatch is one request
+away from being found.
+
+### Web UI
+
+`web/index.html` is a single static page (no build step): upload a CV and a
+report, watch the job, read the scores, browse history, and see retrieval status.
+It calls the API under a relative `api/` prefix, so it is served next to a proxy
+that maps `/profx/api/` to the service. Scores produced without the rubric are
+labelled as such in the UI, not hidden.
+
+### Retrieval contract (Ragie)
+
+The retrieval client speaks the documented API, and the three details that broke
+it are worth remembering:
+
+- the endpoint is `POST /retrievals` (plural); `/retrieve` does not exist
+- the request field is `filter` (singular) and takes operators, e.g.
+  `{"type": {"$in": ["job_desc", "cv_rubric"]}}` — not `"job_desc, cv_rubric"`
+- the response field is `scored_chunks`, not `chunks`; decoding the wrong key
+  yielded an empty slice with no error, so retrieval looked successful while
+  handing the model no criteria at all
+
+A retrieval that matches no chunk is reported as an error (`ragie: retrieval
+matched no chunks`, naming the filter), never as an empty success.
+
 ### Score scales (do not "fix" these again)
 
 - `cv_match_rate` is 0.00-1.00.

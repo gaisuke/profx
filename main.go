@@ -67,11 +67,17 @@ func main() {
 	// evaluation records that it ran without rubric context.
 	ragieAPIKey := getEnv("RAGIE_API_KEY", "")
 	var retriever services.Retriever
+	var retrieverDiagnostics handlers.RetrieverDiagnostics
 	if ragieAPIKey == "" {
 		log.Printf("RAGIE_API_KEY is not set: rubric retrieval disabled, evaluations run without rubric context")
-		retriever = ragie.NoopClient{}
+		noop := ragie.NoopClient{}
+		retriever = noop
+		retrieverDiagnostics = noop
 	} else {
-		retriever = ragie.NewClient(ragieAPIKey)
+		client := ragie.NewClient(ragieAPIKey)
+		retriever = client
+		retrieverDiagnostics = client
+		log.Printf("Ragie retrieval enabled (filter key %q)", getEnv("RAGIE_FILTER_KEY", "type"))
 	}
 
 	// Initialize the LLM client. LLM_PROVIDER picks the provider; both implement
@@ -127,11 +133,16 @@ func main() {
 	uploadHandler := handlers.NewUploadHandler(documentService)
 	evaluateHandler := handlers.NewEvaluateHandler(jobService, validate)
 	resultHandler := handlers.NewResultHandler(jobService, validate)
+	resultsHandler := handlers.NewResultsHandler(jobService)
+	opsHandler := handlers.NewOpsHandler(retrieverDiagnostics, provider)
 
 	// Register routes
 	http.Handle("/upload", uploadHandler)
 	http.Handle("/evaluate", evaluateHandler)
 	http.Handle("/result/", resultHandler)
+	http.Handle("/results", resultsHandler)
+	http.Handle("/healthz", opsHandler)
+	http.Handle("/retrieval-check", opsHandler)
 
 	// Get port from environment or use default
 	port := getEnv("SERVER_PORT", "8080")
@@ -153,6 +164,9 @@ func main() {
 		log.Printf("  POST   http://localhost:%s/upload\n", port)
 		log.Printf("  POST   http://localhost:%s/evaluate\n", port)
 		log.Printf("  GET    http://localhost:%s/result/{id}\n", port)
+		log.Printf("  GET    http://localhost:%s/results?limit=N\n", port)
+		log.Printf("  GET    http://localhost:%s/healthz\n", port)
+		log.Printf("  GET    http://localhost:%s/retrieval-check\n", port)
 		log.Printf("Worker pool: %d workers ready\n", numWorkers)
 
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
