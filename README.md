@@ -260,6 +260,27 @@ It calls the API under a relative `api/` prefix, so it is served next to a proxy
 that maps `/profx/api/` to the service. Scores produced without the rubric are
 labelled as such in the UI, not hidden.
 
+### The public demo
+
+`PROFX_DEMO_MAX_EVALS_PER_DAY=0` (default) means a private deployment with no cap.
+Setting it turns on public-demo behaviour:
+
+- `POST /evaluate` is refused with `429` once the day's budget is spent, and the
+  refusal names the reset time. The check runs before any job is created, and a
+  broken counter fails closed rather than allowing unlimited spend.
+- `GET /results` (history) returns `403`: a public demo must not list other
+  visitors' evaluations. Individual results stay reachable by their UUID, which
+  is the id the visitor already holds.
+- `GET /healthz` reports `demo: {enabled, used, limit, remaining, resets_at}` and
+  the UI shows the remaining count plus a "do not upload real personal data"
+  notice. A quota nobody can see is indistinguishable from a bug.
+
+Rate limiting belongs to the reverse proxy; the daily cap belongs here, because
+only the application knows how much work it accepted.
+
+Old uploads are deleted by `deploy/prune-uploads.sh` (run from cron): the demo
+accepts files from strangers, so they should not accumulate forever.
+
 ### Where rubrics come from
 
 `RAGIE_BASE_URL` selects the retrieval service. On this host it points at

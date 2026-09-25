@@ -24,7 +24,7 @@ func (f *fakeLister) ListRecent(limit int) ([]models.EvaluationJob, error) {
 func TestResultsHandlerReturnsHistory(t *testing.T) {
 	lister := &fakeLister{jobs: []models.EvaluationJob{{ID: "job-1", JobTitle: "Backend Engineer"}}}
 	rec := httptest.NewRecorder()
-	NewResultsHandler(lister).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/results", nil))
+	NewResultsHandler(lister, nil).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/results", nil))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
@@ -43,7 +43,7 @@ func TestResultsHandlerReturnsHistory(t *testing.T) {
 
 func TestResultsHandlerClampsAndRejectsLimit(t *testing.T) {
 	lister := &fakeLister{}
-	h := NewResultsHandler(lister)
+	h := NewResultsHandler(lister, nil)
 
 	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/results?limit=9999", nil))
 	if lister.lastLimit != maxHistoryLimit {
@@ -65,7 +65,7 @@ func TestResultsHandlerClampsAndRejectsLimit(t *testing.T) {
 
 func TestResultsHandlerReportsStoreFailure(t *testing.T) {
 	rec := httptest.NewRecorder()
-	NewResultsHandler(&fakeLister{err: errors.New("db down")}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/results", nil))
+	NewResultsHandler(&fakeLister{err: errors.New("db down")}, nil).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/results", nil))
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want 500", rec.Code)
 	}

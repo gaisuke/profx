@@ -16,11 +16,12 @@ type JobLister interface {
 
 // ResultsHandler serves the evaluation history: GET /results?limit=N
 type ResultsHandler struct {
-	jobs JobLister
+	jobs  JobLister
+	quota QuotaGate
 }
 
-func NewResultsHandler(jobs JobLister) *ResultsHandler {
-	return &ResultsHandler{jobs: jobs}
+func NewResultsHandler(jobs JobLister, quota QuotaGate) *ResultsHandler {
+	return &ResultsHandler{jobs: jobs, quota: quota}
 }
 
 const (
@@ -31,6 +32,13 @@ const (
 func (rh *ResultsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		sendJSONError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// A public demo must not list other people's evaluations. Individual results
+	// stay reachable by their unguessable id, which the visitor already holds.
+	if rh.quota != nil && rh.quota.Enabled() {
+		sendJSONError(w, "Evaluation history is disabled in the public demo. Your own result stays available on the page you just used.", http.StatusForbidden)
 		return
 	}
 

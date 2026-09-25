@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/gaisuke/profx/internal/models"
 	"github.com/gaisuke/profx/internal/storage"
@@ -69,4 +70,10 @@ func (js *JobService) IncrementRetryCount(id string) error {
 // ListRecent returns the newest evaluations for the history view.
 func (js *JobService) ListRecent(limit int) ([]models.EvaluationJob, error) {
 	return js.jobRepo.ListRecent(limit)
+}
+
+// CountCreatedSince counts evaluations created since a point in time, which is
+// how the demo quota is measured.
+func (js *JobService) CountCreatedSince(since time.Time) (int, error) {
+	return js.jobRepo.CountCreatedSince(since)
 }

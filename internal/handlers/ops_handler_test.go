@@ -39,7 +39,7 @@ func get(t *testing.T, h http.Handler, path string) (int, map[string]any) {
 }
 
 func TestHealthzReportsIntegrations(t *testing.T) {
-	h := NewOpsHandler(stubRetriever{docs: []ragie.Document{{ID: "d1"}}}, "opencodego")
+	h := NewOpsHandler(stubRetriever{docs: []ragie.Document{{ID: "d1"}}}, "opencodego", nil)
 	code, body := get(t, h, "/healthz")
 	if code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", code)
@@ -55,7 +55,7 @@ func TestHealthzReportsIntegrations(t *testing.T) {
 
 // An unreachable corpus must show up as an explicit reason, not as "ok".
 func TestHealthzSurfacesRagieFailure(t *testing.T) {
-	h := NewOpsHandler(stubRetriever{docsErr: errors.New("request failed: TLS handshake timeout")}, "opencodego")
+	h := NewOpsHandler(stubRetriever{docsErr: errors.New("request failed: TLS handshake timeout")}, "opencodego", nil)
 	_, body := get(t, h, "/healthz")
 	ragieInfo := body["ragie"].(map[string]any)
 	if ragieInfo["configured"] != false {
@@ -75,7 +75,7 @@ func TestRetrievalCheckReportsCorpusMetadataAndMatches(t *testing.T) {
 		{ID: "d3", Name: "brief.md", Metadata: map[string]any{"type": "case_brief"}},
 		{ID: "d4", Name: "other.md", Metadata: map[string]any{"kind": "note"}},
 	}
-	h := NewOpsHandler(stubRetriever{context: "--- Chunk 1 (relevance: 0.90) ---\nrubric text\n", docs: docs}, "opencodego")
+	h := NewOpsHandler(stubRetriever{context: "--- Chunk 1 (relevance: 0.90) ---\nrubric text\n", docs: docs}, "opencodego", nil)
 
 	code, body := get(t, h, "/retrieval-check")
 	if code != http.StatusOK {
@@ -108,7 +108,7 @@ func TestRetrievalCheckFlagsFilterThatMatchesNothing(t *testing.T) {
 	h := NewOpsHandler(stubRetriever{
 		retrieveErr: errors.New("ragie: retrieval matched no chunks"),
 		docs:        docs,
-	}, "opencodego")
+	}, "opencodego", nil)
 
 	_, body := get(t, h, "/retrieval-check")
 	retrieval := body["cv_retrieval"].(map[string]any)

@@ -37,12 +37,16 @@
   .h-title { font-weight:600; font-size:14px; }
   .h-meta { color:var(--muted); font-size:12.5px; margin-top:3px; }
   .empty { color:var(--muted); font-size:13.5px; }
+  .note { margin:0; padding:12px 20px; background:#1a1508; border-bottom:1px solid #4a3a12; color:#f0d9a0; font-size:13.5px; }
+  .note b { color:#fbbf24; }
+  .meta-dump { display:block; max-height:120px; overflow:auto; margin-top:4px; padding:8px 10px; background:#0f1319; border:1px solid var(--line); border-radius:8px; font-size:12px; line-height:1.5; word-break:break-all; white-space:pre-wrap; }
 </style>
 </head>
 <body>
 <header>
   <h1>profx</h1><span>AI evaluator for job screening — CV + project/case study, scored against a rubric</span>
 </header>
+<p id="demo-note" class="note" hidden></p>
 <main>
   <section class="card">
     <h2>New evaluation</h2>
@@ -56,7 +60,7 @@
     <div id="result"></div>
   </section>
 
-  <section class="card">
+  <section class="card" id="history-card">
     <h2>History</h2>
     <ul class="history" id="history"><li class="empty">Loading…</li></ul>
   </section>
@@ -162,7 +166,11 @@ el('form').addEventListener('submit', async (event) => {
       }),
     });
     const job = await evaluate.json().catch(() => ({}));
-    if (!evaluate.ok) throw new Error(job.error || `evaluate failed (HTTP ${evaluate.status})`);
+    if (!evaluate.ok) {
+      // A demo quota refusal is expected behaviour, not a mystery: say so plainly.
+      const hint = evaluate.status === 429 ? ' — the daily demo quota is used up; try again after midnight WIB.' : '';
+      throw new Error((job.error || `evaluate failed (HTTP ${evaluate.status})`) + hint);
+    }
 
     let result = { id: job.id, status: job.status };
     for (let attempt = 0; attempt < 100; attempt++) {
@@ -191,6 +199,19 @@ async function loadHealth() {
     const h = await res.json();
     const r = h.ragie || {};
     const chip = r.configured ? '<span class="chip ok">reachable</span>' : '<span class="chip bad">unreachable</span>';
+    const demo = h.demo || {};
+    const note = el('demo-note');
+    if (demo.enabled) {
+      note.hidden = false;
+      note.innerHTML = `<b>Public demo.</b> ${demo.remaining} of ${demo.limit} evaluations left today` +
+        ` (resets midnight WIB). Please do not upload real personal data: files are stored on this server` +
+        ` and sent to the model provider for scoring.`;
+      // No history in the public demo: it would list other visitors' evaluations.
+      const card = el('history-card');
+      if (card) card.hidden = true;
+    } else {
+      note.hidden = true;
+    }
     box.innerHTML = `<p class="h-meta">LLM provider: <b>${escapeHtml(h.provider || '—')}</b></p>
       <p class="h-meta">Retrieval corpus: ${chip}${r.base_url ? ' <code>' + escapeHtml(r.base_url) + '</code>' : ''}</p>
       <p class="h-meta">Filter key: <code>${escapeHtml(r.filter_key || '—')}</code></p>
@@ -218,7 +239,7 @@ async function retrievalCheck() {
       <p class="h-meta">Corpus: <b>${corpus.documents ?? '—'}</b> document(s)${corpus.error ? ' — ' + escapeHtml(corpus.error) : ''}</p>
       <p class="h-meta">Filter <code>${escapeHtml(d.filter_key || '')}</code> → <code>${escapeHtml((d.cv_filter || []).join(', '))}</code> matches <b>${m.documents_matching_cv_filter ?? '—'}</b> document(s)</p>
       <p class="h-meta">Project filter matches <b>${m.documents_matching_project_filter ?? '—'}</b> document(s)</p>
-      ${corpus.metadata_values ? `<p class="h-meta">Metadata in corpus: <code>${escapeHtml(JSON.stringify(corpus.metadata_values))}</code></p>` : ''}`;
+      ${corpus.metadata_values ? `<p class="h-meta">Metadata in corpus (what a filter can match):</p><code class="meta-dump">${escapeHtml(JSON.stringify(corpus.metadata_values, null, 1))}</code>` : ''}`;
   } catch (err) {
     box.innerHTML = `<p class="h-meta">Check failed: ${escapeHtml(err.message)}</p>`;
   }

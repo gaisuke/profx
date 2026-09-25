@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gaisuke/profx/internal/ragie"
+	"github.com/gaisuke/profx/internal/services"
 )
 
 // RetrieverDiagnostics is the view of the retriever the ops endpoints need.
@@ -28,13 +30,20 @@ type RetrieverDiagnostics interface {
 // answers 200 with an empty result and the pipeline then scores without a rubric.
 // Reporting the corpus's real metadata values turns that silent failure into a
 // one-request diagnosis.
+// DemoReporter exposes the public demo's quota, so the UI can show visitors how
+// much of the day's budget is left instead of letting them discover it by failing.
+type DemoReporter interface {
+	Status(ctx context.Context) (services.DemoStatus, error)
+}
+
 type OpsHandler struct {
 	retriever RetrieverDiagnostics
 	provider  string
+	demo      DemoReporter
 }
 
-func NewOpsHandler(retriever RetrieverDiagnostics, provider string) *OpsHandler {
-	return &OpsHandler{retriever: retriever, provider: provider}
+func NewOpsHandler(retriever RetrieverDiagnostics, provider string, demo DemoReporter) *OpsHandler {
+	return &OpsHandler{retriever: retriever, provider: provider, demo: demo}
 }
 
 func (h *OpsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -56,7 +65,7 @@ func (h *OpsHandler) health(w http.ResponseWriter) {
 	key, _, _ := h.retriever.FilterConfigInfo()
 	_, docsErr := h.retriever.Documents()
 
-	writeJSON(w, http.StatusOK, map[string]any{
+	payload := map[string]any{
 		"status":   "ok",
 		"provider": h.provider,
 		"ragie": map[string]any{
@@ -65,7 +74,17 @@ func (h *OpsHandler) health(w http.ResponseWriter) {
 			"base_url":   h.retriever.BaseURL(),
 			"detail":     errString(docsErr),
 		},
-	})
+	}
+
+	if h.demo != nil {
+		if status, err := h.demo.Status(context.Background()); err == nil {
+			payload["demo"] = status
+		} else {
+			payload["demo"] = map[string]any{"enabled": true, "error": err.Error()}
+		}
+	}
+
+	writeJSON(w, http.StatusOK, payload)
 }
 
 func (h *OpsHandler) retrievalCheck(w http.ResponseWriter) {

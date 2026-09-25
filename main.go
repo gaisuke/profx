@@ -135,11 +135,18 @@ func main() {
 	validate := validator.New()
 
 	// Initialize handlers
+	// Public demo: 0 disables the cap (private deployment). When set, the quota
+	// bounds the model spend an open endpoint can cause, and the API reports it.
+	demoMode := services.NewDemoMode(jobRepo, getEnvAsInt("PROFX_DEMO_MAX_EVALS_PER_DAY", 0))
+	if demoMode.Enabled() {
+		log.Printf("public demo mode: max %d evaluations per day (WIB)", demoMode.Limit())
+	}
+
 	uploadHandler := handlers.NewUploadHandler(documentService)
-	evaluateHandler := handlers.NewEvaluateHandler(jobService, validate)
+	evaluateHandler := handlers.NewEvaluateHandler(jobService, validate, demoMode)
 	resultHandler := handlers.NewResultHandler(jobService, validate)
-	resultsHandler := handlers.NewResultsHandler(jobService)
-	opsHandler := handlers.NewOpsHandler(retrieverDiagnostics, provider)
+	resultsHandler := handlers.NewResultsHandler(jobService, demoMode)
+	opsHandler := handlers.NewOpsHandler(retrieverDiagnostics, provider, demoMode)
 
 	// Register routes
 	http.Handle("/upload", uploadHandler)

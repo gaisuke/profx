@@ -3,6 +3,7 @@ package storage
 import (
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/gaisuke/profx/internal/models"
 )
@@ -193,6 +194,17 @@ func (r *JobRepository) IncrementRetry(id string) error {
 	}
 
 	return nil
+}
+
+// CountCreatedSince counts evaluations created at or after a point in time.
+// The public demo uses it to measure today's spend before accepting more work.
+func (r *JobRepository) CountCreatedSince(since time.Time) (int, error) {
+	var n int
+	err := r.db.QueryRow(`SELECT count(*) FROM evaluation_jobs WHERE created_at >= $1`, since).Scan(&n)
+	if err != nil {
+		return 0, err
+	}
+	return n, nil
 }
 
 // ListRecent returns the most recent evaluations, newest first, for the history
