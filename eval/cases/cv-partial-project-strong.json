@@ -1,0 +1,13 @@
+{
+  "id": "cv-partial-project-strong",
+  "job_title": "Backend Engineer (Go)",
+  "expected_cv_min": 0.3,
+  "expected_cv_max": 0.7,
+  "expected_project_min": 4.0,
+  "expected_project_max": 5.0,
+  "notes": "Constructed mixed case: weaker CV but strong evidence of engineering reasoning in the submission.",
+  "cv_text": "SARI DEWI — Application Developer, 3 years.\nEXPERIENCE: internal tooling in PHP/Laravel and Python; one Go side project deployed for 200 internal users. SQL design experience on MySQL; Docker for local development; no Kubernetes in production.\nSKILLS: PHP, MySQL, Python, Go (intermediate), Docker, Git.",
+  "report_text": "CASE STUDY: consolidating three duplicate invoice services.\nProblem: three teams each owned an invoice writer; 40% of production incidents traced back to inconsistent behaviour between them. I had no authority over the other teams.\nApproach: mapped the behavioural differences into a comparison table, then proposed a single service with a compatibility layer. Rejected a big-bang rewrite and instead migrated one caller at a time behind a feature flag, keeping both paths for 3 weeks.\nResults: 3 services -> 1, incident share 40% -> 9% over two quarters, 1,200 lines of duplicated code removed. I measured the incident split before and after with the on-call log and shared the numbers with both teams.",
+  "rubric": "SCORING RUBRIC (weights):\n- Core language depth (Go): 35%. Must-have: ≥3 years production Go, concurrency.\n- Data layer (Postgres/SQL): 25%. Must-have: schema design, query tuning.\n- Infrastructure (Docker/Kubernetes/CI): 20%. Nice-to-have at mid level.\n- Evidence of impact: 20%. Measurable outcomes, ownership of delivered work.",
+  "project_rubric": "PROJECT RUBRIC (score 1-5 where 5 = exceptional):\n- Problem framing and constraints: 30%\n- Technical depth and trade-offs discussed: 30%\n- Evidence (measurements, benchmarks, post-mortems): 20%\n- Communication quality and structure: 20%\n- 1-2: little evidence or no trade-offs. 3: adequate. 4-5: clear reasoning with measured results."
+}

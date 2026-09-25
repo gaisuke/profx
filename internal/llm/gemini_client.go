@@ -4,16 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"strings"
-	"time"
 
 	"google.golang.org/genai"
-)
-
-const (
-	maxRetries = 3
-	timeout    = 30 * time.Second
 )
 
 type GeminiClient struct {
@@ -47,35 +40,12 @@ func (c *GeminiClient) Generate(ctx context.Context, prompt string) (string, err
 	return c.GenerateWithRetry(ctx, prompt, maxRetries)
 }
 
-// GenerateWithRetry attempts to generate content with retry logic
+// GenerateWithRetry delegates to the shared retry helper, so Gemini and
+// OpenCode Go back off and classify errors identically.
 func (c *GeminiClient) GenerateWithRetry(ctx context.Context, prompt string, retries int) (string, error) {
-	var lastErr error
-
-	for attempt := 0; attempt < retries; attempt++ {
-		if attempt > 0 {
-			// Exponential backoff: 1s, 2s, 4s
-			backoff := time.Duration(math.Pow(2, float64(attempt-1))) * time.Second
-			select {
-			case <-ctx.Done():
-				return "", ctx.Err()
-			case <-time.After(backoff):
-			}
-		}
-
-		response, err := c.generate(ctx, prompt)
-		if err == nil {
-			return response, nil
-		}
-
-		lastErr = err
-
-		// Don't retry on certain errors
-		if !isRetryableError(err) {
-			break
-		}
-	}
-
-	return "", fmt.Errorf("failed after %d retries: %w", retries, lastErr)
+	return generateWithRetry(ctx, retries, func(ctx context.Context) (string, error) {
+		return c.generate(ctx, prompt)
+	})
 }
 
 func (c *GeminiClient) generate(ctx context.Context, prompt string) (string, error) {
@@ -107,36 +77,6 @@ func (c *GeminiClient) generate(ctx context.Context, prompt string) (string, err
 	}
 
 	return text, nil
-}
-
-func isRetryableError(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	errStr := strings.ToLower(err.Error())
-
-	// Retry on network errors, timeouts, rate limits
-	retryable := []string{
-		"timeout",
-		"connection",
-		"rate limit",
-		"429",
-		"500",
-		"502",
-		"503",
-		"504",
-		"deadline exceeded",
-		"context deadline",
-	}
-
-	for _, keyword := range retryable {
-		if strings.Contains(errStr, keyword) {
-			return true
-		}
-	}
-
-	return false
 }
 
 // Helper function to create pointer to float32

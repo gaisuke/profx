@@ -1,0 +1,13 @@
+{
+  "id": "cv-strong-project-strong",
+  "job_title": "Backend Engineer (Go)",
+  "expected_cv_min": 0.8,
+  "expected_cv_max": 1.0,
+  "expected_project_min": 4.0,
+  "expected_project_max": 5.0,
+  "notes": "Constructed strong/strong: CV lists every must-have with years and impact; report has measurements.",
+  "cv_text": "BAGAS PRATAMA — Backend Engineer, 6 years.\nEXPERIENCE: 2021-2026 Payments Platform Engineer. Owned a Go service handling 4k req/s; cut p99 latency from 420ms to 160ms by replacing an N+1 query pattern and adding a Redis read-through cache. Designed the Postgres schema for a ledger of 180M rows (partitioned by month, tuned autovacuum, cut slow queries by 70%). Ran the Kubernetes migration for 12 services and set up GitHub Actions with parallel integration tests (build time 22m -> 6m). Earlier: 2019-2021 Go microservices for a logistics startup; introduced contract tests that reduced staging incidents by half.\nSKILLS: Go (expert), Postgres, Docker, Kubernetes, CI/CD, gRPC, observability (Prometheus/Grafana).",
+  "report_text": "CASE STUDY: reducing checkout failures.\nProblem: 3.4% of checkout attempts failed in peak hours, costing an estimated Rp120M/month. Constraint: no downtime, one engineer, 6 weeks.\nApproach: instrumented the flow with tracing, found the failure concentrated in one downstream provider call with a 5s timeout and no circuit breaker. Rejected the obvious 'increase timeout' fix because it shifted the failure to connection exhaustion; instead added a breaker with a 200ms budget and idempotent retries.\nResults: failures 3.4% -> 0.6% measured over 4 weeks with 1.2M checkouts; p99 checkout latency 1.8s -> 640ms. Wrote a post-mortem and a runbook; the breaker became the standard pattern for 5 other integrations.",
+  "rubric": "SCORING RUBRIC (weights):\n- Core language depth (Go): 35%. Must-have: ≥3 years production Go, concurrency.\n- Data layer (Postgres/SQL): 25%. Must-have: schema design, query tuning.\n- Infrastructure (Docker/Kubernetes/CI): 20%. Nice-to-have at mid level.\n- Evidence of impact: 20%. Measurable outcomes, ownership of delivered work.",
+  "project_rubric": "PROJECT RUBRIC (score 1-5 where 5 = exceptional):\n- Problem framing and constraints: 30%\n- Technical depth and trade-offs discussed: 30%\n- Evidence (measurements, benchmarks, post-mortems): 20%\n- Communication quality and structure: 20%\n- 1-2: little evidence or no trade-offs. 3: adequate. 4-5: clear reasoning with measured results."
+}

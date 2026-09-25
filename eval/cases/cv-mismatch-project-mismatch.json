@@ -1,0 +1,13 @@
+{
+  "id": "cv-mismatch-project-mismatch",
+  "job_title": "Backend Engineer (Go)",
+  "expected_cv_min": 0.0,
+  "expected_cv_max": 0.35,
+  "expected_project_min": 1.0,
+  "expected_project_max": 3.0,
+  "notes": "Constructed clear no: neither the CV nor the submission touches the rubric's must-haves.",
+  "cv_text": "RINA KUSUMA — Brand Marketing Specialist, 4 years. Social campaigns, agency coordination, budget of Rp250M/month, copywriting. No programming experience, no database or infrastructure work.",
+  "report_text": "My project was a content calendar. I planned posts, the designer made them, engagement increased. No measurements were taken and there were no engineering constraints to discuss.",
+  "rubric": "SCORING RUBRIC (weights):\n- Core language depth (Go): 35%. Must-have: ≥3 years production Go, concurrency.\n- Data layer (Postgres/SQL): 25%. Must-have: schema design, query tuning.\n- Infrastructure (Docker/Kubernetes/CI): 20%. Nice-to-have at mid level.\n- Evidence of impact: 20%. Measurable outcomes, ownership of delivered work.",
+  "project_rubric": "PROJECT RUBRIC (score 1-5 where 5 = exceptional):\n- Problem framing and constraints: 30%\n- Technical depth and trade-offs discussed: 30%\n- Evidence (measurements, benchmarks, post-mortems): 20%\n- Communication quality and structure: 20%\n- 1-2: little evidence or no trade-offs. 3: adequate. 4-5: clear reasoning with measured results."
+}

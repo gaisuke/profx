@@ -1,0 +1,13 @@
+{
+  "id": "cv-mismatch-project-weak",
+  "job_title": "Backend Engineer (Go)",
+  "expected_cv_min": 0.0,
+  "expected_cv_max": 0.35,
+  "expected_project_min": 1.0,
+  "expected_project_max": 3.0,
+  "notes": "Constructed mismatch: a marketing profile for an engineering role (checks the model resists politeness).",
+  "cv_text": "RINA KUSUMA — Brand Marketing Specialist, 4 years.\nEXPERIENCE: managed social campaigns for an FMCG brand, grew Instagram followers by 62% in 8 months, coordinated with agencies and ran a monthly budget of Rp250M. Comfortable with Meta Ads Manager, analytics dashboards, and copywriting in Indonesian and English.\nSKILLS: digital marketing, content strategy, Excel, presentation design. No programming experience.",
+  "report_text": "MY PROJECT: content calendar.\nI made a content calendar with 30 posts for one month and coordinated with the designer. Engagement went up. It was fun and the client liked it.",
+  "rubric": "SCORING RUBRIC (weights):\n- Core language depth (Go): 35%. Must-have: ≥3 years production Go, concurrency.\n- Data layer (Postgres/SQL): 25%. Must-have: schema design, query tuning.\n- Infrastructure (Docker/Kubernetes/CI): 20%. Nice-to-have at mid level.\n- Evidence of impact: 20%. Measurable outcomes, ownership of delivered work.",
+  "project_rubric": "PROJECT RUBRIC (score 1-5 where 5 = exceptional):\n- Problem framing and constraints: 30%\n- Technical depth and trade-offs discussed: 30%\n- Evidence (measurements, benchmarks, post-mortems): 20%\n- Communication quality and structure: 20%\n- 1-2: little evidence or no trade-offs. 3: adequate. 4-5: clear reasoning with measured results."
+}

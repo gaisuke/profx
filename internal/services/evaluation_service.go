@@ -5,10 +5,11 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"strings"
+	"time"
 
 	"github.com/gaisuke/profx/internal/llm"
 	"github.com/gaisuke/profx/internal/models"
-	"github.com/gaisuke/profx/internal/ragie"
 	"github.com/gaisuke/profx/internal/storage"
 	"github.com/gaisuke/profx/internal/utils"
 	"github.com/ledongthuc/pdf"
@@ -17,15 +18,15 @@ import (
 type EvaluationService struct {
 	jobRepo      *storage.JobRepository
 	documentRepo *storage.DocumentRepository
-	ragieClient  *ragie.Client
-	llmClient    *llm.GeminiClient
+	ragieClient  Retriever
+	llmClient    LLM
 }
 
 func NewEvaluationService(
 	jobRepo *storage.JobRepository,
 	documentRepo *storage.DocumentRepository,
-	ragieClient *ragie.Client,
-	llmClient *llm.GeminiClient,
+	ragieClient Retriever,
+	llmClient LLM,
 ) *EvaluationService {
 	return &EvaluationService{
 		jobRepo:      jobRepo,
@@ -106,9 +107,9 @@ func (es *EvaluationService) EvaluateJob(ctx context.Context, jobID string) erro
 	}
 
 	// Update job with results
-	job.CVMatchRate = sql.NullFloat64{Float64: utils.NormalizeScore(cvResult.CVMatchRate), Valid: true}
+	job.CVMatchRate = sql.NullFloat64{Float64: utils.NormalizeMatchRate(cvResult.CVMatchRate), Valid: true}
 	job.CVFeedback = sql.NullString{String: cvResult.CVFeedback, Valid: true}
-	job.ProjectScore = sql.NullFloat64{Float64: utils.NormalizeScore(projectResult.ProjectScore), Valid: true}
+	job.ProjectScore = sql.NullFloat64{Float64: utils.NormalizeProjectScore(projectResult.ProjectScore), Valid: true}
 	job.ProjectFeedback = sql.NullString{String: projectResult.ProjectFeedback, Valid: true}
 	job.OverallSummary = sql.NullString{String: summary.OverallSummary, Valid: true}
 	job.Status = models.JobStatusCompleted
@@ -121,80 +122,100 @@ func (es *EvaluationService) EvaluateJob(ctx context.Context, jobID string) erro
 	return nil
 }
 
-// evaluateCV performs CV evaluation using RAG + LLM
+// evaluateCV reads the CV from disk and evaluates it. Reading and evaluating are
+// separate so the evaluation can be driven from plain text — by unit tests and
+// by the eval harness — without fabricating PDF files.
 func (es *EvaluationService) evaluateCV(ctx context.Context, jobTitle, cvFilePath string) (*CVEvaluationResult, error) {
-	// Retrieve context from Ragie
-	context, err := es.ragieClient.RetrieveForCV(jobTitle)
-	if err != nil {
-		log.Printf("Warning: Failed to retrieve CV context from Ragie: %v", err)
-		context = "No additional context available."
-	}
-
-	// Read CV content
 	cvContent, err := readPDFContent(cvFilePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read CV: %w", err)
 	}
+	return es.evaluateCVText(ctx, jobTitle, cvContent)
+}
 
-	// Build prompt
+// evaluateCVText runs the CV stage: rubric context, prompt, model call, parse, validate.
+func (es *EvaluationService) evaluateCVText(ctx context.Context, jobTitle, cvContent string) (*CVEvaluationResult, error) {
+	context, degraded := retrieveWithRetry(func() (string, error) {
+		return es.ragieClient.RetrieveForCV(jobTitle)
+	}, "CV")
+	if degraded {
+		log.Printf("Warning: CV rubric unavailable; scoring the CV without rubric context")
+	}
 	prompt := buildCVEvaluationPrompt(context, cvContent, jobTitle)
-
-	// Call LLM
 	response, err := es.llmClient.Generate(ctx, prompt)
 	if err != nil {
 		return nil, fmt.Errorf("LLM call failed: %w", err)
 	}
-
-	// Parse response using the helper from llm package
 	var result CVEvaluationResult
 	if err := llm.ParseJSONResponse(response, &result); err != nil {
 		return nil, fmt.Errorf("failed to parse CV evaluation response: %w", err)
 	}
-
-	// Validate
 	if err := validateCVResult(&result); err != nil {
 		return nil, fmt.Errorf("invalid CV result: %w", err)
 	}
-
 	return &result, nil
 }
 
-// evaluateProject performs project evaluation using RAG + LLM
+// evaluateProject reads the project report from disk and evaluates it.
 func (es *EvaluationService) evaluateProject(ctx context.Context, reportFilePath string) (*ProjectEvaluationResult, error) {
-	// Retrieve context from Ragie
-	context, err := es.ragieClient.RetrieveForProject()
-	if err != nil {
-		log.Printf("Warning: Failed to retrieve project context from Ragie: %v", err)
-		context = "No additional context available."
-	}
-
-	// Read project report content
 	reportContent, err := readPDFContent(reportFilePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read project report: %w", err)
 	}
+	return es.evaluateProjectText(ctx, reportContent)
+}
 
-	// Build prompt
+// evaluateProjectText runs the project stage: rubric context, prompt, model call, parse, validate.
+func (es *EvaluationService) evaluateProjectText(ctx context.Context, reportContent string) (*ProjectEvaluationResult, error) {
+	context, degraded := retrieveWithRetry(func() (string, error) {
+		return es.ragieClient.RetrieveForProject()
+	}, "project")
+	if degraded {
+		log.Printf("Warning: project rubric unavailable; scoring the report without rubric context")
+	}
 	prompt := buildProjectEvaluationPrompt(context, reportContent)
-
-	// Call LLM
 	response, err := es.llmClient.Generate(ctx, prompt)
 	if err != nil {
 		return nil, fmt.Errorf("LLM call failed: %w", err)
 	}
-
-	// Parse response
 	var result ProjectEvaluationResult
 	if err := llm.ParseJSONResponse(response, &result); err != nil {
 		return nil, fmt.Errorf("failed to parse project evaluation response: %w", err)
 	}
-
-	// Validate
 	if err := validateProjectResult(&result); err != nil {
 		return nil, fmt.Errorf("invalid project result: %w", err)
 	}
-
 	return &result, nil
+}
+
+// Retrieval attempts before scoring without a rubric, and the placeholder used
+// when it never arrives. A transient retrieval failure used to score the
+// candidate with no criteria at all, silently.
+const (
+	retrievalAttempts = 3
+	fallbackContext   = "No additional context available."
+)
+
+// retrieveWithRetry fetches the rubric context, retrying transient failures. It
+// reports whether the caller is now running degraded (no rubric).
+func retrieveWithRetry(fetch func() (string, error), label string) (string, bool) {
+	var lastErr error
+	for attempt := 0; attempt < retrievalAttempts; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Duration(attempt) * 500 * time.Millisecond)
+		}
+		text, err := fetch()
+		switch {
+		case err != nil:
+			lastErr = err
+		case strings.TrimSpace(text) == "":
+			lastErr = fmt.Errorf("empty %s context", label)
+		default:
+			return text, false
+		}
+	}
+	log.Printf("Warning: failed to retrieve %s context after %d attempts: %v", label, retrievalAttempts, lastErr)
+	return fallbackContext, true
 }
 
 // generateSummary creates final overall summary

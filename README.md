@@ -186,3 +186,27 @@ Example of registering a new handler:
 newHandler := handlers.NewYourHandler(yourService)
 http.Handle("/your-endpoint", newHandler)
 ```
+
+## Testing and evaluation
+
+```bash
+go test ./...                                    # unit tests, no network
+EVAL_ENABLE=1 OPENCODE_GO_API_KEY=... \
+  go test -tags eval ./internal/services/ -run TestEvalHarness -v   # scoring quality
+```
+
+Unit tests cover the scoring maths (a project score of 4.2 must never come back as
+0.042), JSON repair of fenced or truncated model replies, retry classification
+(a 429 retries, a 400 does not) and the provider client against a local HTTP
+server. The evaluation harness measures agreement with labelled expectations,
+drift across repeats and structured-output failure rate — see `eval/README.md`.
+
+## LLM providers
+
+`LLM_PROVIDER` selects the provider; both speak through the same interface, so the
+pipeline is provider-agnostic:
+
+- `opencodego` (default) — Anthropic Messages format at
+  `https://opencode.ai/zen/go/v1/messages`. The gateway sits behind Cloudflare
+  (a browser `User-Agent` is required) and demands a session header.
+- `gemini` — Google Gen AI SDK.

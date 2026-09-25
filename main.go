@@ -69,14 +69,37 @@ func main() {
 	}
 	ragieClient := ragie.NewClient(ragieAPIKey)
 
-	geminiAPIKey := getEnv("GEMINI_API_KEY", "")
-	if geminiAPIKey == "" {
-		log.Fatal("GEMINI_API_KEY environment variable is required")
-	}
-	geminiModel := getEnv("GEMINI_MODEL", "gemini-1.5-flash")
-	llmClient, err := llm.NewGeminiClient(context.Background(), geminiAPIKey, geminiModel)
-	if err != nil {
-		log.Fatal("Failed to initialize Gemini client:", err)
+	// Initialize the LLM client. LLM_PROVIDER picks the provider; both implement
+	// the same interface, so the evaluation pipeline is provider-agnostic.
+	provider := getEnv("LLM_PROVIDER", "opencodego")
+	var llmClient services.LLM
+	switch provider {
+	case "opencodego":
+		apiKey := getEnv("OPENCODE_GO_API_KEY", "")
+		if apiKey == "" {
+			log.Fatal("OPENCODE_GO_API_KEY is required when LLM_PROVIDER=opencodego")
+		}
+		client := llm.NewOpenCodeGoClient(
+			apiKey,
+			getEnv("OPENCODE_GO_BASE_URL", ""),
+			getEnv("OPENCODE_GO_MODEL", ""),
+			getEnvAsInt("OPENCODE_GO_MAX_TOKENS", 0),
+		)
+		log.Printf("LLM provider: opencodego (model %s)", client.Model())
+		llmClient = client
+	case "gemini":
+		geminiAPIKey := getEnv("GEMINI_API_KEY", "")
+		if geminiAPIKey == "" {
+			log.Fatal("GEMINI_API_KEY is required when LLM_PROVIDER=gemini")
+		}
+		client, err := llm.NewGeminiClient(context.Background(), geminiAPIKey, getEnv("GEMINI_MODEL", "gemini-1.5-flash"))
+		if err != nil {
+			log.Fatal("Failed to initialize Gemini client:", err)
+		}
+		log.Printf("LLM provider: gemini")
+		llmClient = client
+	default:
+		log.Fatalf("unknown LLM_PROVIDER %q (expected gemini or opencodego)", provider)
 	}
 
 	// Initialize services

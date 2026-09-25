@@ -39,3 +39,5 @@ profx-server
 
 # Vendor directory
 vendor/
+# Evaluation harness reports (generated)
+eval/out/

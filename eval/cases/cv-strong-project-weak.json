@@ -1,0 +1,13 @@
+{
+  "id": "cv-strong-project-weak",
+  "job_title": "Backend Engineer (Go)",
+  "expected_cv_min": 0.8,
+  "expected_cv_max": 1.0,
+  "expected_project_min": 1.0,
+  "expected_project_max": 2.5,
+  "notes": "Constructed strong CV but a thin submission: separates 'can do the job' from 'communicates results'.",
+  "cv_text": "BAGAS PRATAMA — Backend Engineer, 6 years.\nEXPERIENCE: 2021-2026 Payments Platform Engineer. Owned a Go service handling 4k req/s; cut p99 latency from 420ms to 160ms. Designed a partitioned Postgres ledger of 180M rows and cut slow queries by 70%. Migrated 12 services to Kubernetes and halved CI build time.\nSKILLS: Go (expert), Postgres, Docker, Kubernetes, CI/CD, gRPC.",
+  "report_text": "I once made our checkout faster. I looked at the code and found a slow part, then I changed it. After that the checkout was faster and the team was happy. It was a good project and I learned a lot about performance. I think it worked well.",
+  "rubric": "SCORING RUBRIC (weights):\n- Core language depth (Go): 35%. Must-have: ≥3 years production Go, concurrency.\n- Data layer (Postgres/SQL): 25%. Must-have: schema design, query tuning.\n- Infrastructure (Docker/Kubernetes/CI): 20%. Nice-to-have at mid level.\n- Evidence of impact: 20%. Measurable outcomes, ownership of delivered work.",
+  "project_rubric": "PROJECT RUBRIC (score 1-5 where 5 = exceptional):\n- Problem framing and constraints: 30%\n- Technical depth and trade-offs discussed: 30%\n- Evidence (measurements, benchmarks, post-mortems): 20%\n- Communication quality and structure: 20%\n- 1-2: little evidence or no trade-offs. 3: adequate. 4-5: clear reasoning with measured results."
+}

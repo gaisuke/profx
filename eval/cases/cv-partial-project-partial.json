@@ -1,0 +1,13 @@
+{
+  "id": "cv-partial-project-partial",
+  "job_title": "Backend Engineer (Go)",
+  "expected_cv_min": 0.3,
+  "expected_cv_max": 0.7,
+  "expected_project_min": 2.5,
+  "expected_project_max": 4.0,
+  "notes": "Constructed adjacent profile: solid fundamentals without production Go ownership.",
+  "cv_text": "SARI DEWI — Application Developer, 3 years.\nEXPERIENCE: 2023-2026 building internal tools mainly in PHP (Laravel) and some Python. Wrote a service in Go for a hack week project (a URL shortener) and enjoyed it, but production Go is limited to small scripts. Comfortable with SQL: designed a 12-table MySQL schema and added indexes that reduced a reporting query from 9s to 700ms. Used Docker locally; Kubernetes experience limited to reading deployment manifests.\nSKILLS: PHP, MySQL, Python, Go (intermediate), Docker, Git.",
+  "report_text": "PROJECT: migration of an internal reporting dashboard.\nProblem: the weekly report took 9 seconds and timed out for large tenants.\nApproach: added composite indexes, split the query into two steps and cached the aggregate per tenant-night. I considered moving it to a column store but did not have infrastructure support.\nResults: p50 went from 9s to 700ms in staging; production numbers were not measured before handover. I documented the schema changes for the next engineer.",
+  "rubric": "SCORING RUBRIC (weights):\n- Core language depth (Go): 35%. Must-have: ≥3 years production Go, concurrency.\n- Data layer (Postgres/SQL): 25%. Must-have: schema design, query tuning.\n- Infrastructure (Docker/Kubernetes/CI): 20%. Nice-to-have at mid level.\n- Evidence of impact: 20%. Measurable outcomes, ownership of delivered work.",
+  "project_rubric": "PROJECT RUBRIC (score 1-5 where 5 = exceptional):\n- Problem framing and constraints: 30%\n- Technical depth and trade-offs discussed: 30%\n- Evidence (measurements, benchmarks, post-mortems): 20%\n- Communication quality and structure: 20%\n- 1-2: little evidence or no trade-offs. 3: adequate. 4-5: clear reasoning with measured results."
+}
