@@ -260,6 +260,14 @@ It calls the API under a relative `api/` prefix, so it is served next to a proxy
 that maps `/profx/api/` to the service. Scores produced without the rubric are
 labelled as such in the UI, not hidden.
 
+### Where rubrics come from
+
+`RAGIE_BASE_URL` selects the retrieval service. On this host it points at
+`rubrikd` (127.0.0.1:8780), a self-hosted corpus of the rubric documents, and
+`RAGIE_FILTER_KEY=kind` matching the corpus tags (`cv_rubric`, `job_desc`,
+`case_brief`, `project_rubric`). Without a base URL or an API key, retrieval is
+disabled and evaluations run without rubric context — visibly, never silently.
+
 ### Retrieval contract (Ragie)
 
 The retrieval client speaks the documented API, and the three details that broke
