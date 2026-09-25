@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>profx — AI evaluator for job screening</title>
+<style>
+  :root { color-scheme: dark; --bg:#0f1115; --card:#161a21; --line:#242a35; --ink:#e7eaf0; --muted:#98a2b3; --accent:#4ade80; --warn:#fbbf24; --bad:#f87171; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  header { padding:22px 20px 14px; border-bottom:1px solid var(--line); display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; }
+  header h1 { margin:0; font-size:20px; letter-spacing:-.01em; }
+  header span { color:var(--muted); font-size:13.5px; }
+  main { max-width:1080px; margin:0 auto; padding:22px 20px 70px; display:grid; gap:18px; grid-template-columns:1.35fr 1fr; }
+  @media (max-width:880px){ main{ grid-template-columns:1fr; } }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px; }
+  .card h2 { margin:0 0 14px; font-size:15px; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); }
+  label { display:block; margin-bottom:12px; font-size:13.5px; color:var(--muted); }
+  input[type=text], input[type=file] { width:100%; margin-top:6px; padding:10px 12px; background:#0f1319; border:1px solid var(--line); border-radius:9px; color:var(--ink); font:inherit; }
+  button { background:var(--accent); color:#08130c; border:0; border-radius:9px; padding:11px 18px; font:600 14.5px/1 inherit; cursor:pointer; }
+  button[disabled] { opacity:.55; cursor:progress; }
+  .status { min-height:22px; margin:12px 0 0; font-size:13.5px; color:var(--muted); }
+  .status.err { color:var(--bad); }
+  .scores { display:flex; gap:22px; flex-wrap:wrap; margin-bottom:14px; }
+  .score b { display:block; font-size:30px; line-height:1.1; letter-spacing:-.02em; }
+  .score small { color:var(--muted); font-size:12.5px; text-transform:uppercase; letter-spacing:.06em; }
+  .chip { display:inline-block; font-size:12px; padding:3px 9px; border-radius:99px; border:1px solid var(--line); color:var(--muted); }
+  .chip.ok { color:var(--accent); border-color:#1f4030; }
+  .chip.warn { color:var(--warn); border-color:#4a3a12; }
+  .chip.bad { color:var(--bad); border-color:#4a2020; }
+  .feedback { white-space:pre-wrap; border-left:2px solid var(--line); padding-left:12px; margin:14px 0 0; color:#cdd5e0; font-size:14px; }
+  .feedback h3 { margin:0 0 6px; font-size:12.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); }
+  ul.history { list-style:none; margin:0; padding:0; display:grid; gap:8px; max-height:520px; overflow:auto; }
+  ul.history li { border:1px solid var(--line); border-radius:10px; padding:10px 12px; cursor:pointer; }
+  ul.history li:hover { border-color:#3a4351; }
+  .h-top { display:flex; justify-content:space-between; gap:10px; align-items:center; }
+  .h-title { font-weight:600; font-size:14px; }
+  .h-meta { color:var(--muted); font-size:12.5px; margin-top:3px; }
+  .empty { color:var(--muted); font-size:13.5px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>profx</h1><span>AI evaluator for job screening — CV + project/case study, scored against a rubric</span>
+</header>
+<main>
+  <section class="card">
+    <h2>New evaluation</h2>
+    <form id="form">
+      <label>Job title<input type="text" name="job_title" required placeholder="Backend Engineer (Go)"></label>
+      <label>Candidate CV (PDF)<input type="file" name="candidate_cv" accept="application/pdf" required></label>
+      <label>Project report / case study (PDF)<input type="file" name="project_report" accept="application/pdf" required></label>
+      <button id="submit" type="submit">Evaluate</button>
+    </form>
+    <p class="status" id="status"></p>
+    <div id="result"></div>
+  </section>
+
+  <section class="card">
+    <h2>History</h2>
+    <ul class="history" id="history"><li class="empty">Loading…</li></ul>
+  </section>
+
+  <section class="card">
+    <h2>Integrations</h2>
+    <div id="integrations" class="h-meta">Checking…</div>
+    <button id="ragie-check" type="button" style="margin-top:12px">Run retrieval check</button>
+  </section>
+</main>
+
+<script>
+const API = 'api';
+
+const el = (id) => document.getElementById(id);
+const setStatus = (msg, isError) => { const s = el('status'); s.textContent = msg || ''; s.className = 'status' + (isError ? ' err' : ''); };
+
+function fmtDate(iso) {
+  if (!iso) return '';
+  try { return new Date(iso).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }); }
+  catch { return iso; }
+}
+
+function statusChip(status) {
+  const cls = status === 'completed' ? 'ok' : status === 'failed' ? 'bad' : 'warn';
+  return `<span class="chip ${cls}">${status || 'unknown'}</span>`;
+}
+
+// A score produced without the rubric is not an error, but the reviewer must be
+// able to see the difference at a glance.
+function rubrikWarning(job) {
+  const text = (job.cv_feedback || '') + (job.project_feedback || '');
+  return text.includes('RUBRIC UNAVAILABLE') ? '<span class="chip warn">no rubric context</span>' : '<span class="chip ok">rubric applied</span>';
+}
+
+function render(job) {
+  const box = el('result');
+  const cv = job.cv_match_rate != null ? job.cv_match_rate.toFixed(2) : '—';
+  const proj = job.project_score != null ? job.project_score.toFixed(2) : '—';
+  const parts = [`<div class="scores">
+      <div class="score"><b>${cv}</b><small>CV match (0-1)</small></div>
+      <div class="score"><b>${proj}</b><small>Project (1-5)</small></div>
+    </div>
+    <div>${statusChip(job.status)} ${rubrikWarning(job)}</div>`];
+
+  if (job.error_message) parts.push(`<p class="feedback" style="border-color:#4a2020;color:#f3b4b4">${escapeHtml(job.error_message)}</p>`);
+  if (job.cv_feedback) parts.push(`<div class="feedback"><h3>CV feedback</h3>${escapeHtml(job.cv_feedback)}</div>`);
+  if (job.project_feedback) parts.push(`<div class="feedback"><h3>Project feedback</h3>${escapeHtml(job.project_feedback)}</div>`);
+  if (job.overall_summary) parts.push(`<div class="feedback"><h3>Recommendation</h3>${escapeHtml(job.overall_summary)}</div>`);
+  parts.push(`<p class="status">Job ${job.id}${job.created_at ? ' · ' + fmtDate(job.created_at) : ''}</p>`);
+  box.innerHTML = parts.join('');
+}
+
+function escapeHtml(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c])); }
+
+async function loadHistory() {
+  const list = el('history');
+  try {
+    const res = await fetch(`${API}/results?limit=20`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const jobs = await res.json();
+    if (!jobs.length) { list.innerHTML = '<li class="empty">No evaluations yet.</li>'; return; }
+    list.innerHTML = jobs.map((j) => `
+      <li data-id="${j.id}">
+        <div class="h-top"><span class="h-title">${escapeHtml(j.job_title || 'Untitled role')}</span>${statusChip(j.status)}</div>
+        <div class="h-meta">${fmtDate(j.created_at)} · CV ${j.cv_match_rate != null ? j.cv_match_rate.toFixed(2) : '—'} · project ${j.project_score != null ? j.project_score.toFixed(2) : '—'}</div>
+      </li>`).join('');
+    list.querySelectorAll('li[data-id]').forEach((li) => li.addEventListener('click', () => show(li.dataset.id)));
+  } catch (err) {
+    list.innerHTML = `<li class="empty">Could not load history: ${escapeHtml(err.message)}</li>`;
+  }
+}
+
+async function show(id) {
+  setStatus('Loading result…');
+  try {
+    const res = await fetch(`${API}/result/${id}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    render(await res.json());
+    setStatus('');
+  } catch (err) { setStatus(`Failed to load result: ${err.message}`, true); }
+}
+
+el('form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.target;
+  const button = el('submit');
+  button.disabled = true;
+  el('result').innerHTML = '';
+  setStatus('Uploading…');
+  try {
+    const upload = await fetch(`${API}/upload`, { method: 'POST', body: new FormData(form) });
+    const upBody = await upload.json().catch(() => ({}));
+    if (!upload.ok) throw new Error(upBody.error || `upload failed (HTTP ${upload.status})`);
+
+    setStatus('Queued, evaluating (a few model calls)…');
+    const evaluate = await fetch(`${API}/evaluate`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        job_title: form.job_title.value,
+        candidate_cv_id: upBody.candidate_cv_id,
+        project_report_id: upBody.project_report_id,
+      }),
+    });
+    const job = await evaluate.json().catch(() => ({}));
+    if (!evaluate.ok) throw new Error(job.error || `evaluate failed (HTTP ${evaluate.status})`);
+
+    let result = { id: job.id, status: job.status };
+    for (let attempt = 0; attempt < 100; attempt++) {
+      await new Promise((r) => setTimeout(r, 3000));
+      const res = await fetch(`${API}/result/${job.id}`);
+      result = await res.json();
+      if (result.status === 'completed' || result.status === 'failed') break;
+      setStatus(`Evaluating… (${result.status})`);
+    }
+    render(result);
+    setStatus(result.status === 'completed' ? 'Done.' : 'Finished with errors — see below.', result.status !== 'completed');
+    loadHistory();
+  } catch (err) {
+    setStatus(`Failed: ${err.message}`, true);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+// The retrieval status is shown, not hidden: a score produced without the
+// rubric looks exactly like one produced with it unless the UI says otherwise.
+async function loadHealth() {
+  const box = el('integrations');
+  try {
+    const res = await fetch(`${API}/healthz`);
+    const h = await res.json();
+    const r = h.ragie || {};
+    const chip = r.configured ? '<span class="chip ok">reachable</span>' : '<span class="chip bad">unreachable</span>';
+    box.innerHTML = `<p class="h-meta">LLM provider: <b>${escapeHtml(h.provider || '—')}</b></p>
+      <p class="h-meta">Ragie corpus: ${chip}</p>
+      <p class="h-meta">Filter key: <code>${escapeHtml(r.filter_key || '—')}</code></p>
+      ${r.configured ? '' : `<p class="h-meta">${escapeHtml(r.detail || '')}</p>`}`;
+  } catch (err) {
+    box.innerHTML = `<p class="h-meta">Could not load status: ${escapeHtml(err.message)}</p>`;
+  }
+}
+
+// One request that answers the question a silent empty retrieval cannot:
+// which documents exist, and which of them my filter actually matches.
+async function retrievalCheck() {
+  const box = el('integrations');
+  box.innerHTML = '<p class="h-meta">Running a live retrieval…</p>';
+  try {
+    const res = await fetch(`${API}/retrieval-check`);
+    const d = await res.json();
+    const cv = d.cv_retrieval || {};
+    const corpus = d.corpus || {};
+    const m = d.filter_match || {};
+    box.innerHTML = `
+      <p class="h-meta">Retrieval: ${cv.ok
+        ? `<span class="chip ok">${cv.chunks} chunk(s) · ${cv.took_ms} ms</span>`
+        : `<span class="chip bad">failed</span> ${escapeHtml(cv.error || '')}`}</p>
+      <p class="h-meta">Corpus: <b>${corpus.documents ?? '—'}</b> document(s)${corpus.error ? ' — ' + escapeHtml(corpus.error) : ''}</p>
+      <p class="h-meta">Filter <code>${escapeHtml(d.filter_key || '')}</code> → <code>${escapeHtml((d.cv_filter || []).join(', '))}</code> matches <b>${m.documents_matching_cv_filter ?? '—'}</b> document(s)</p>
+      <p class="h-meta">Project filter matches <b>${m.documents_matching_project_filter ?? '—'}</b> document(s)</p>
+      ${corpus.metadata_values ? `<p class="h-meta">Metadata in corpus: <code>${escapeHtml(JSON.stringify(corpus.metadata_values))}</code></p>` : ''}`;
+  } catch (err) {
+    box.innerHTML = `<p class="h-meta">Check failed: ${escapeHtml(err.message)}</p>`;
+  }
+}
+el('ragie-check').addEventListener('click', retrievalCheck);
+
+loadHistory();
+loadHealth();
+</script>
+</body>
+</html>
