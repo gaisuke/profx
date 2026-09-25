@@ -65,3 +65,8 @@ func (js *JobService) UpdateJobError(id, errorMsg string, retryCount int) error 
 func (js *JobService) IncrementRetryCount(id string) error {
 	return js.jobRepo.IncrementRetry(id)
 }
+
+// ListRecent returns the newest evaluations for the history view.
+func (js *JobService) ListRecent(limit int) ([]models.EvaluationJob, error) {
+	return js.jobRepo.ListRecent(limit)
+}

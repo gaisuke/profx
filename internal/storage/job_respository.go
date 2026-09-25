@@ -194,3 +194,37 @@ func (r *JobRepository) IncrementRetry(id string) error {
 
 	return nil
 }
+
+// ListRecent returns the most recent evaluations, newest first, for the history
+// view. Bounded by the caller so one request cannot dump the whole table.
+func (r *JobRepository) ListRecent(limit int) ([]models.EvaluationJob, error) {
+	query := `
+		SELECT id, job_title, cv_document_id, report_document_id, status,
+			cv_match_rate, cv_feedback, project_score, project_feedback,
+			overall_summary, error_message, retry_count,
+			created_at, updated_at, completed_at
+		FROM evaluation_jobs
+		ORDER BY created_at DESC
+		LIMIT $1
+	`
+	rows, err := r.db.Query(query, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	jobs := []models.EvaluationJob{}
+	for rows.Next() {
+		job := models.EvaluationJob{}
+		if err := rows.Scan(
+			&job.ID, &job.JobTitle, &job.CVDocumentID, &job.ReportDocumentID, &job.Status,
+			&job.CVMatchRate, &job.CVFeedback, &job.ProjectScore, &job.ProjectFeedback,
+			&job.OverallSummary, &job.ErrorMessage, &job.RetryCount,
+			&job.CreatedAt, &job.UpdatedAt, &job.CompletedAt,
+		); err != nil {
+			return nil, err
+		}
+		jobs = append(jobs, job)
+	}
+	return jobs, rows.Err()
+}

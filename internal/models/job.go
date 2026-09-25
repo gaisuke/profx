@@ -34,7 +34,9 @@ type EvaluationJob struct {
 
 type EvaluationJobResponse struct {
 	ID              string    `json:"id"`
+	JobTitle        string    `json:"job_title"`
 	Status          JobStatus `json:"status"`
+	CreatedAt       time.Time `json:"created_at"`
 	CVMatchRate     *float64  `json:"cv_match_rate,omitempty"`
 	CVFeedback      *string   `json:"cv_feedback,omitempty"`
 	ProjectScore    *float64  `json:"project_score,omitempty"`
@@ -45,8 +47,10 @@ type EvaluationJobResponse struct {
 
 func (j *EvaluationJob) ToResponse() *EvaluationJobResponse {
 	resp := &EvaluationJobResponse{
-		ID:     j.ID,
-		Status: j.Status,
+		ID:        j.ID,
+		JobTitle:  j.JobTitle,
+		Status:    j.Status,
+		CreatedAt: j.CreatedAt,
 	}
 	if j.CVMatchRate.Valid {
 		resp.CVMatchRate = &j.CVMatchRate.Float64
