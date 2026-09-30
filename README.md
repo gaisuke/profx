@@ -238,6 +238,43 @@ evaluation is produced without rubric context. The prompt then tells the model n
 to invent criteria and to prefix its feedback with `RUBRIC UNAVAILABLE:`, so a
 reviewer can see the score was made without the rubric.
 
+## Public CV check (/cek)
+
+`/cek` is the self-service side of profx: a job seeker pastes a job description
+and their CV and gets a score, three concrete gaps, and one rewritten line. It
+needs no account, no rubric corpus (the job description *is* the rubric), and no
+Ragie — the retrieval path exists for the recruiter-side pipeline, and a visitor
+has already handed us the only criteria that matter.
+
+```
+POST /cek              multipart: job_desc, cv_text or cv_file (PDF), job_title
+GET  /cek/hasil/{id}   the stored result, while it is still alive
+GET  /cek/info         quota left for this visitor
+POST /cek/minat        interest in the paid part (waitlist)
+```
+
+What is stored, and what is not:
+
+- Stored: the score, the findings, a short job label, a salted SHA-256 of the
+  client IP, and the timestamps. Expired rows are refused on read and deleted by
+  an hourly sweeper; `CEK_TTL_HOURS` (default 24) is the retention promise.
+- Not stored: the CV text and the job description. An uploaded PDF is parsed in
+  memory and discarded — it never reaches `uploads/`. The tests assert this by
+  building the stored row and checking the CV body and job description body are
+  absent from it.
+
+Cost control, because this is the one unauthenticated endpoint that spends model
+money: `CEK_PER_IP_PER_DAY` (default 3) per visitor, `CEK_GLOBAL_PER_DAY`
+(default 100) across the deployment, the reverse proxy's `limit_req`, and an
+optional Cloudflare Turnstile check (`TURNSTILE_SECRET` — empty means off, and
+the service says so at startup). Only successful checks consume quota, so a
+model timeout does not cost a visitor a turn. `OPENCODE_GO_TIMEOUT_SECONDS`
+(default 30) bounds one attempt: a visitor-facing check wants a longer leash
+than the async recruiter pipeline.
+
+The result id is 80 bits of randomness in base32, because the id is the only
+thing protecting a result page.
+
 ### Health and diagnostics
 
 ```

@@ -38,6 +38,10 @@ type OpenCodeGoClient struct {
 	model      string
 	maxTokens  int
 	sessionID  string
+	// timeout bounds a single attempt. It is per client rather than package-wide
+	// because the right number depends on the caller: an async recruiter job can
+	// wait a minute, a visitor staring at a web form cannot.
+	timeout time.Duration
 }
 
 func NewOpenCodeGoClient(apiKey, baseURL, model string, maxTokens int) *OpenCodeGoClient {
@@ -52,6 +56,7 @@ func NewOpenCodeGoClient(apiKey, baseURL, model string, maxTokens int) *OpenCode
 	}
 	return &OpenCodeGoClient{
 		httpClient: &http.Client{Timeout: timeout + 5*time.Second},
+		timeout:    timeout,
 		baseURL:    strings.TrimRight(baseURL, "/"),
 		apiKey:     apiKey,
 		model:      model,
@@ -62,6 +67,17 @@ func NewOpenCodeGoClient(apiKey, baseURL, model string, maxTokens int) *OpenCode
 
 // Model reports the configured model, for logs and eval reports.
 func (c *OpenCodeGoClient) Model() string { return c.model }
+
+// WithTimeout overrides the per-attempt timeout and rebuilds the HTTP client to
+// match, so the transport deadline can never be looser than the context one.
+func (c *OpenCodeGoClient) WithTimeout(d time.Duration) *OpenCodeGoClient {
+	if d <= 0 {
+		return c
+	}
+	c.timeout = d
+	c.httpClient = &http.Client{Timeout: d + 5*time.Second}
+	return c
+}
 
 // Generate sends a prompt and returns the model's text reply.
 func (c *OpenCodeGoClient) Generate(ctx context.Context, prompt string) (string, error) {
@@ -88,7 +104,7 @@ type anthropicMessageResponse struct {
 }
 
 func (c *OpenCodeGoClient) generate(ctx context.Context, prompt string) (string, error) {
-	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
+	timeoutCtx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 
 	maxTokens := c.maxTokens

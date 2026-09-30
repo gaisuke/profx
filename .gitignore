@@ -41,3 +41,6 @@ profx-server
 vendor/
 # Evaluation harness reports (generated)
 eval/out/
+
+# Build output
+bin/

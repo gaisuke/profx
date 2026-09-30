@@ -100,8 +100,9 @@ func main() {
 			getEnv("OPENCODE_GO_BASE_URL", ""),
 			getEnv("OPENCODE_GO_MODEL", ""),
 			getEnvAsInt("OPENCODE_GO_MAX_TOKENS", 0),
-		)
-		log.Printf("LLM provider: opencodego (model %s)", client.Model())
+		).WithTimeout(time.Duration(getEnvAsInt("OPENCODE_GO_TIMEOUT_SECONDS", 30)) * time.Second)
+		log.Printf("LLM provider: opencodego (model %s, timeout %s per attempt)",
+			client.Model(), getEnv("OPENCODE_GO_TIMEOUT_SECONDS", "30")+"s")
 		llmClient = client
 	case "gemini":
 		geminiAPIKey := getEnv("GEMINI_API_KEY", "")
@@ -148,13 +149,49 @@ func main() {
 	resultsHandler := handlers.NewResultsHandler(jobService, demoMode)
 	opsHandler := handlers.NewOpsHandler(retrieverDiagnostics, provider, demoMode)
 
+	// Public CV check (/cek): the self-service side. No authentication, so its
+	// cost is bounded by a per-visitor quota, an optional global daily cap, and
+	// the reverse proxy's rate limiting.
+	cekRepo := storage.NewCekRepository(db)
+	cekService := services.NewCekService(cekRepo, llmClient, services.CekConfig{
+		PerIPLimit:  getEnvAsInt("CEK_PER_IP_PER_DAY", 3),
+		GlobalLimit: getEnvAsInt("CEK_GLOBAL_PER_DAY", 100),
+		TTL:         time.Duration(getEnvAsInt("CEK_TTL_HOURS", 24)) * time.Hour,
+		IPSalt:      getEnv("CEK_IP_SALT", "profx-cek"),
+		PaidOpen:    getEnv("CEK_PAID_OPEN", "false") == "true",
+	})
+	turnstile := handlers.NewTurnstileVerifier(getEnv("TURNSTILE_SECRET", ""))
+	if turnstile == nil {
+		log.Printf("cek: Turnstile tidak aktif (TURNSTILE_SECRET kosong) — andalan: kuota per pengunjung + rate limit di reverse proxy")
+	}
+	cekHandler := handlers.NewCekHandler(cekService, turnstile)
+
 	// Register routes
 	http.Handle("/upload", uploadHandler)
 	http.Handle("/evaluate", evaluateHandler)
 	http.Handle("/result/", resultHandler)
 	http.Handle("/results", resultsHandler)
+	http.Handle("/cek", cekHandler)
+	http.Handle("/cek/", cekHandler)
 	http.Handle("/healthz", opsHandler)
 	http.Handle("/retrieval-check", opsHandler)
+
+	// Retention is a promise on the page, so it gets a sweeper rather than a
+	// hope. Reads already refuse expired rows; this deletes them.
+	go func() {
+		ticker := time.NewTicker(time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if _, err := cekService.Cleanup(ctx); err != nil {
+					log.Printf("cek: pembersihan gagal: %v", err)
+				}
+			}
+		}
+	}()
 
 	// Get port from environment or use default. The bind address defaults to
 	// loopback: this API takes CVs and has no authentication of its own, so it
@@ -181,6 +218,10 @@ func main() {
 		log.Printf("  POST   http://localhost:%s/evaluate\n", port)
 		log.Printf("  GET    http://localhost:%s/result/{id}\n", port)
 		log.Printf("  GET    http://localhost:%s/results?limit=N\n", port)
+		log.Printf("  POST   http://localhost:%s/cek            (publik, tanpa login)\n", port)
+		log.Printf("  GET    http://localhost:%s/cek/hasil/{id} (publik)\n", port)
+		log.Printf("  GET    http://localhost:%s/cek/info       (publik)\n", port)
+		log.Printf("  POST   http://localhost:%s/cek/minat      (publik)\n", port)
 		log.Printf("  GET    http://localhost:%s/healthz\n", port)
 		log.Printf("  GET    http://localhost:%s/retrieval-check\n", port)
 		log.Printf("Worker pool: %d workers ready\n", numWorkers)

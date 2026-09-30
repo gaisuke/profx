@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hasil cek CV — profx</title>
+<style>
+  :root { color-scheme: dark; --bg:#0f1115; --card:#161a21; --line:#242a35; --ink:#e7eaf0;
+          --muted:#98a2b3; --accent:#4ade80; --warn:#fbbf24; --bad:#f87171; --soft:#8b93a4; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.65 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  header { padding:20px; border-bottom:1px solid var(--line); display:flex; gap:12px; align-items:baseline; flex-wrap:wrap; }
+  header .brand { font-weight:700; } header .brand span { color:var(--accent); }
+  header a { color:var(--muted); font-size:14px; text-decoration:none; }
+  main { max-width:760px; margin:0 auto; padding:26px 20px 80px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px; margin-bottom:16px; }
+  .card h2 { margin:0 0 12px; font-size:14px; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); }
+  .score-wrap { display:flex; gap:18px; align-items:center; flex-wrap:wrap; }
+  .score { font-size:52px; font-weight:700; letter-spacing:-.03em; line-height:1; }
+  .score small { font-size:18px; color:var(--soft); font-weight:400; }
+  .pill { display:inline-block; font-size:12.5px; padding:4px 10px; border-radius:999px; border:1px solid var(--line); color:var(--muted); }
+  .gap { border-top:1px solid var(--line); padding:14px 0; } .gap:first-child { border-top:0; }
+  .gap .bagian { font-size:13px; color:var(--warn); text-transform:uppercase; letter-spacing:.06em; }
+  .gap .masalah { margin:6px 0 4px; } .gap .perbaikan { color:var(--muted); font-size:14.5px; }
+  .fix { background:#11151c; border:1px dashed var(--line); border-radius:10px; padding:14px; }
+  .fix .seb { color:var(--bad); text-decoration:line-through; text-decoration-color:#7f1d1d; }
+  .fix .ses { color:var(--accent); margin-top:6px; } .fix .why { color:var(--soft); font-size:13.5px; margin-top:8px; }
+  .small { font-size:13px; color:var(--soft); }
+  button { background:var(--accent); color:#08130c; border:0; border-radius:10px; padding:12px 18px; font:600 15px/1 inherit; cursor:pointer; }
+  .err { background:#2a1719; border:1px solid #5b2a2f; color:#fca5a5; border-radius:10px; padding:12px 14px; font-size:14.5px; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">profx <span>cek CV</span></div>
+  <a href="/profx/cek/">cek CV lain</a>
+</header>
+<main>
+  <div id="loading" class="card"><h2>memuat</h2><p style="margin:0">Mengambil hasil…</p></div>
+  <div id="err" class="err hidden"></div>
+  <div id="out" class="hidden">
+    <div class="card">
+      <h2>skor kecocokan</h2>
+      <div class="score-wrap">
+        <div class="score" id="score">–</div>
+        <div class="verdict" style="flex:1;min-width:220px">
+          <div class="pill" id="pill">–</div>
+          <p id="ringkasan" style="margin:10px 0 0"></p>
+        </div>
+      </div>
+      <p class="small" id="expiry" style="margin-top:14px"></p>
+    </div>
+    <div class="card"><h2>tiga celah terbesar</h2><div id="gaps"></div></div>
+    <div class="card"><h2>satu contoh perbaikan</h2><div id="contoh"></div></div>
+    <div class="card">
+      <h2>langkah berikutnya</h2>
+      <p style="margin:0">Mau CV-mu disusun ulang mengikuti lowongan ini? Bagian itu belum dibuka —
+      pembayarannya belum aktif.</p>
+      <p class="small">Tinggalkan kontak di <a href="/profx/cek/" style="color:var(--accent)">halaman cek</a>
+      kalau mau dikabari saat dibuka.</p>
+    </div>
+    <p class="small">Ini alat bantu, bukan keputusan perekrut dan bukan janji kamu akan dipanggil interview.</p>
+  </div>
+</main>
+<script>
+const id = new URLSearchParams(location.search).get("id");
+const $ = (x) => document.getElementById(x);
+function escapeHtml(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function band(s){ if(s<=20)return["Tidak nyambung","#f87171"]; if(s<=45)return["Ada sedikit kesamaan","#fb923c"];
+  if(s<=65)return["Cukup cocok","#fbbf24"]; if(s<=80)return["Cocok","#a3e635"]; return["Sangat cocok","#4ade80"]; }
+
+if (!id) {
+  $("loading").classList.add("hidden");
+  $("err").classList.remove("hidden");
+  $("err").textContent = "Tautan ini tidak memuat id hasil.";
+} else {
+  fetch("/profx/api/cek/hasil/" + encodeURIComponent(id))
+    .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
+    .then(({ ok, d }) => {
+      $("loading").classList.add("hidden");
+      if (!d.ok) {
+        $("err").classList.remove("hidden");
+        $("err").textContent = d.error || "Hasil tidak ditemukan.";
+        return;
+      }
+      const h = d.hasil || {};
+      const [label, color] = band(d.skor);
+      $("score").innerHTML = d.skor + "<small>/100</small>";
+      $("score").style.color = color;
+      const pill = $("pill"); pill.textContent = label + " · " + (d.job_title || "lowongan"); pill.style.color = color;
+      $("ringkasan").textContent = h.ringkasan || "";
+      $("gaps").innerHTML = (h.celah || []).map((g) => `
+        <div class="gap"><div class="bagian">${escapeHtml(g.bagian)}</div>
+        <div class="masalah">${escapeHtml(g.masalah)}</div>
+        <div class="perbaikan">→ ${escapeHtml(g.perbaikan)}</div></div>`).join("");
+      const c = h.contoh_perbaikan || {};
+      $("contoh").innerHTML = `<div class="fix"><div class="seb">${escapeHtml(c.sebelum||"")}</div>
+        <div class="ses">${escapeHtml(c.sesudah||"")}</div><div class="why">${escapeHtml(c.alasan||"")}</div></div>`;
+      const exp = d.kedaluwarsa ? new Date(d.kedaluwarsa) : null;
+      $("expiry").textContent = exp ? "Tautan ini terhapus otomatis setelah " + exp.toLocaleString("id-ID") + "." : "";
+      $("out").classList.remove("hidden");
+    })
+    .catch((e) => {
+      $("loading").classList.add("hidden");
+      $("err").classList.remove("hidden");
+      $("err").textContent = "Gagal memuat hasil: " + e.message;
+    });
+}
+</script>
+</body>
+</html>
