@@ -13,7 +13,12 @@ info:
     - Setiap jawaban membawa `X-Request-Id`.
     - Endpoint berkuota membawa `X-RateLimit-Limit`, `X-RateLimit-Remaining`,
       `X-RateLimit-Reset`.
-    - CORS aktif; origin diatur lewat `API_CORS_ORIGINS` (bawaan `*`).
+    - CORS aktif; origin diatur lewat `API_CORS_ORIGINS` (bawaan `*`). Permintaan
+      `OPTIONS` dijawab `204` dengan header izin, dan seperti jawaban lain ia
+      membawa `X-Request-Id`.
+    - Metode HTTP yang salah dijawab `405`, isi melebihi batas dijawab `413`, dan
+      tipe isi yang tidak dikenal endpoint dijawab `415` — semuanya memakai bentuk
+      galat yang sama.
 
     Kontrak tertulis: `docs/api-contract.md`.
   contact:
@@ -54,9 +59,9 @@ paths:
                 retrieval:
                   enabled: true
                   base_url: http://127.0.0.1:8780
-                  filter_key: type
-                  cv_filter_values: [cv]
-                  project_filter_values: [project]
+                  filter_key: kind
+                  cv_filter_values: [job_desc, cv_rubric]
+                  project_filter_values: [case_brief, project_rubric]
                 sources: [kalibrr, remotive]
                 quotas:
                   checks:
@@ -73,6 +78,8 @@ paths:
                     global_per_day: 20
                     global_used: 0
                     resets_at: "2026-10-02T00:00:00+07:00"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
 
   /v1/openapi.yaml:
     get:
@@ -86,6 +93,8 @@ paths:
             application/yaml:
               schema:
                 type: string
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
 
   /v1/checks:
     post:
@@ -112,6 +121,7 @@ paths:
           multipart/form-data:
             schema:
               type: object
+              required: [job_desc]
               properties:
                 job_title:
                   type: string
@@ -137,10 +147,16 @@ paths:
                 $ref: "#/components/schemas/Check"
         "400":
           $ref: "#/components/responses/ValidationError"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
         "429":
           $ref: "#/components/responses/QuotaExceeded"
         "502":
           $ref: "#/components/responses/UpstreamFailed"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
 
   /v1/checks/limits:
     get:
@@ -154,6 +170,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Limits"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
 
   /v1/checks/{id}:
     get:
@@ -171,6 +189,8 @@ paths:
                 $ref: "#/components/schemas/Check"
         "404":
           $ref: "#/components/responses/NotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
 
   /v1/checks/{id}/interest:
     post:
@@ -210,6 +230,8 @@ paths:
                     example: recorded
         "400":
           $ref: "#/components/responses/ValidationError"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
 
   /v1/searches:
     post:
@@ -257,8 +279,14 @@ paths:
                 $ref: "#/components/schemas/SearchAccepted"
         "400":
           $ref: "#/components/responses/ValidationError"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
         "429":
           $ref: "#/components/responses/QuotaExceeded"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
 
   /v1/searches/limits:
     get:
@@ -272,6 +300,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Limits"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
 
   /v1/searches/{id}:
     get:
@@ -290,6 +320,8 @@ paths:
                 $ref: "#/components/schemas/Search"
         "404":
           $ref: "#/components/responses/NotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
 
   /v1/documents:
     post:
@@ -327,8 +359,12 @@ paths:
                 project_report_id: fde18c07-d0f3-4db3-a607-84a257e5b233
         "400":
           $ref: "#/components/responses/ValidationError"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
         "415":
           $ref: "#/components/responses/UnsupportedMediaType"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
 
   /v1/evaluations:
     post:
@@ -361,10 +397,16 @@ paths:
           $ref: "#/components/responses/ValidationError"
         "429":
           $ref: "#/components/responses/QuotaExceeded"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
     get:
       tags: [evaluations]
       summary: Daftar evaluasi terbaru
-      description: Dinonaktifkan (403) pada deployment demo publik, supaya hasil orang lain tidak bisa dibaca.
+      description: |
+        Dinonaktifkan (403) pada deployment demo publik, supaya hasil orang lain
+        tidak bisa dibaca. **Pada deployment seperti itu gerbang 403 berjalan
+        sebelum `limit`/`offset` dibaca**: `?limit=abc` pun dijawab 403, bukan 400,
+        sehingga jalur 200/400 di bawah hanya berlaku pada deployment privat.
       operationId: listEvaluations
       parameters:
         - name: limit
@@ -393,6 +435,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
 
   /v1/evaluations/{id}:
     get:
@@ -414,6 +458,8 @@ paths:
                 $ref: "#/components/schemas/Evaluation"
         "404":
           $ref: "#/components/responses/NotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
 
 components:
   parameters:
@@ -479,7 +525,27 @@ components:
               code: upstream_failed
               message: "penilaian gagal dijalankan (server penilai sedang lambat atau mati). Kuota cek gratis kamu tidak terpakai — coba lagi sebentar lagi."
     UnsupportedMediaType:
-      description: Tipe isi tidak dikenal endpoint ini
+      description: |
+        Tipe isi tidak dikenal endpoint ini. Endpoint yang menerima JSON dan
+        multipart menolak tipe lain dengan kode `unsupported_media_type`.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    MethodNotAllowed:
+      description: |
+        Metode HTTP salah untuk jalur ini. Setiap jalur menjawabnya dengan bentuk
+        galat yang sama dan kode `method_not_allowed`.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: method_not_allowed
+              message: "metode GET tidak dipakai di /v1/checks. Lihat /profx/api/v1/openapi.yaml."
+    PayloadTooLarge:
+      description: Isi permintaan melebihi batas (bawaan 8 MB)
       content:
         application/json:
           schema:

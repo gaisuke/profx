@@ -166,11 +166,16 @@ func newSearchLimits(q models.CariQuota) limitsResponse {
 	}
 }
 
+// jakartaOffset renders quota times in the timezone the quota actually resets in.
+// The value used to be converted to UTC for the body while the header kept
+// +07:00: the same instant spelled two ways in one response.
+var jakarta = time.FixedZone("WIB", 7*60*60)
+
 func parseOrNow(rfc3339 string) time.Time {
 	if t, err := time.Parse(time.RFC3339, rfc3339); err == nil {
-		return t.UTC()
+		return t.In(jakarta)
 	}
-	return time.Now().UTC()
+	return time.Now().In(jakarta)
 }
 
 // --- job search ------------------------------------------------------------

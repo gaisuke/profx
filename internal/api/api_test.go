@@ -575,6 +575,51 @@ func TestCORSPreflightAndOriginEcho(t *testing.T) {
 	}
 }
 
+func TestPreflightAlsoCarriesTheRequestID(t *testing.T) {
+	// The contract says every response carries X-Request-Id, and the preflight is
+	// a response: it used to be the exception because cors answered it before the
+	// identifier middleware ran.
+	rec := do(t, testDeps(), http.MethodOptions, "/v1/checks", "",
+		map[string]string{"Origin": "https://app.teman.dev", "Access-Control-Request-Method": "POST"})
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, mau 204", rec.Code)
+	}
+	if rec.Header().Get(headerRequestID) == "" {
+		t.Fatal("preflight tidak membawa X-Request-Id")
+	}
+}
+
+func TestQuotaResetBodyAndHeaderDescribeOneInstant(t *testing.T) {
+	deps := testDeps()
+	deps.Checks = &fakeChecks{quota: models.CekQuota{
+		PerIPLimit: 3, PerIPUsed: 1, Remaining: 2,
+		ResetsAt: "2026-10-01T17:00:00Z", // midnight Jakarta, written in UTC
+	}}
+	rec := do(t, deps, http.MethodGet, "/v1/checks/limits", "", nil)
+	var got struct {
+		ResetsAt string `json:"resets_at"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("bukan JSON: %v", err)
+	}
+	body, err := time.Parse(time.RFC3339, got.ResetsAt)
+	if err != nil {
+		t.Fatalf("resets_at tidak RFC3339: %q", got.ResetsAt)
+	}
+	header, err := time.Parse(time.RFC3339, rec.Header().Get(headerReset))
+	if err != nil {
+		t.Fatalf("header reset tidak RFC3339: %q", rec.Header().Get(headerReset))
+	}
+	// One instant, described once: the value used to be converted to UTC in the
+	// body while the header kept the offset it came with.
+	if !body.Equal(header) {
+		t.Fatalf("body %s dan header %s bukan waktu yang sama", body, header)
+	}
+	if !strings.Contains(got.ResetsAt, "+07:00") {
+		t.Fatalf("resets_at = %q, mau waktu Jakarta (+07:00)", got.ResetsAt)
+	}
+}
+
 func TestCORSAllowsAnyOriginByDefault(t *testing.T) {
 	rec := do(t, testDeps(), http.MethodGet, "/v1/health", "", map[string]string{"Origin": "https://apa-saja.example"})
 	if got := rec.Header().Get(headerAllowOrig); got != "*" {

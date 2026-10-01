@@ -31,7 +31,9 @@ salah adalah implementasinya.
 
 ## Kode galat
 
-| code | HTTP | dipakai untuk |
+Semua jawaban menyertakan `X-Request-Id`, termasuk preflight `OPTIONS`.
+
+| `code` | HTTP | dipakai untuk |
 |---|---|---|
 | `validation_failed` | 400 | isi permintaan tidak memenuhi syarat |
 | `not_found` | 404 | id tidak dikenal atau sudah kedaluwarsa |
@@ -52,7 +54,7 @@ salah adalah implementasinya.
 
 ### POST /v1/evaluations
 JSON `{"job_title":"Backend Engineer","cv_document_id":"...","report_document_id":"..."}`
-→ **202** `{"id":"...","status":"pending","job_title":"...","created_at":"..."}`
+← **202** `{"id":"...","status":"queued","job_title":"...","created_at":"..."}`
 
 ### GET /v1/evaluations/{id}
 → **200**
@@ -62,8 +64,13 @@ JSON `{"job_title":"Backend Engineer","cv_document_id":"...","report_document_id
  "project_score":4.2,"project_feedback":"...","overall_summary":"...",
  "error_message":"","created_at":"...","completed_at":"..."}
 ```
-`status`: `pending` | `processing` | `completed` | `failed`. Ruas angka bernilai
+`status`: `queued` | `processing` | `completed` | `failed`. Ruas angka bernilai
 `null` selama belum selesai.
+
+Nilai pertama adalah **`queued`**, bukan `pending`. Versi awal dokumen ini salah
+menuliskannya, dan klien yang dibangun dari dokumen itu akan menolak status yang
+sah. Sumber kebenarannya `internal/models/job.go` plus enum `job_status` di
+Postgres — dokumen OpenAPI sudah benar sejak awal.
 
 ### GET /v1/evaluations?limit=20&offset=0
 → **200** `{"data":[evaluasi...],"meta":{"limit":20,"offset":0,"count":20}}`

@@ -31,7 +31,10 @@ const (
 // body limit. Order matters — recovery outermost so a panic anywhere below still
 // produces the documented error shape instead of a dropped connection.
 func withMiddleware(next http.Handler, allowedOrigins []string, maxBody int64) http.Handler {
-	return recoverer(cors(requestIDs(withLogging(limitBody(next, maxBody))), allowedOrigins))
+	// requestIDs wraps cors, not the other way round: a preflight is answered
+	// inside cors and returns early, so with the old order that 204 was the one
+	// response missing the identifier the contract promises on every response.
+	return recoverer(requestIDs(cors(withLogging(limitBody(next, maxBody)), allowedOrigins)))
 }
 
 // requestIDs stamps an identifier on the exchange: echoed to the client, and put
