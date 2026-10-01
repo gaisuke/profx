@@ -16,7 +16,8 @@ const kalibrrFixture = `{
     {"id": 273049, "name": "Backend Engineer", "slug": "backend-engineer",
      "description": "<p>Kami mencari <b>backend engineer</b> dengan Go dan PostgreSQL.</p>",
      "qualifications": "Pengalaman 3 tahun, Kubernetes",
-     "company_name": "PT Maju Jaya", "activation_date": "2026-09-28T02:44:23+00:00",
+     "company_name": "PT Maju Jaya", "company": {"code": "pt-maju-jaya"},
+     "activation_date": "2026-09-28T02:44:23+00:00",
      "is_work_from_home": false, "function": "Engineering", "tenure": "Full time",
      "google_location": {"address_components": {"city": "Jakarta", "region": "DKI Jakarta", "country": "Indonesia"}}},
     {"id": 0, "name": "", "slug": "kosong", "description": ""}
@@ -57,7 +58,9 @@ func TestParseKalibrr(t *testing.T) {
 	if j.Title != "Backend Engineer" || j.Company != "PT Maju Jaya" {
 		t.Fatalf("judul/perusahaan = %q / %q", j.Title, j.Company)
 	}
-	if j.URL != "https://www.kalibrr.com/jobs/273049/backend-engineer" {
+	// The company code is what makes the link work; the short form renders a
+	// "page not available" shell.
+	if j.URL != "https://www.kalibrr.com/c/pt-maju-jaya/jobs/273049/backend-engineer" {
 		t.Fatalf("url = %q", j.URL)
 	}
 	if !strings.Contains(j.Location, "Jakarta") || !strings.Contains(j.Location, "Indonesia") {
@@ -116,6 +119,22 @@ func TestParseArbeitnow(t *testing.T) {
 	}
 	if !strings.Contains(strings.Join(list[0].Tags, ","), "go") {
 		t.Fatalf("tag = %v", list[0].Tags)
+	}
+}
+
+func TestKalibrrURLNeedsTheCompanyCode(t *testing.T) {
+	cases := []struct {
+		id               int
+		slug, code, want string
+	}{
+		{270342, "backend-developer-2", "trimegah-securities", "https://www.kalibrr.com/c/trimegah-securities/jobs/270342/backend-developer-2"},
+		{270342, "backend-developer-2", "", "https://www.kalibrr.com/job-board?text=backend-developer-2"},
+		{270342, "", "vlink-inc", "https://www.kalibrr.com/c/vlink-inc/jobs/270342"},
+	}
+	for _, c := range cases {
+		if got := kalibrrURL(c.id, c.slug, c.code); got != c.want {
+			t.Fatalf("kalibrrURL(%d, %q, %q) = %q, mau %q", c.id, c.slug, c.code, got, c.want)
+		}
 	}
 }
 

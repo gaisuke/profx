@@ -25,6 +25,9 @@ type kalibrrResponse struct {
 		Slug        string `json:"slug"`
 		Description string `json:"description"`
 		CompanyName string `json:"company_name"`
+		Company     struct {
+			Code string `json:"code"`
+		} `json:"company"`
 		Activation  string `json:"activation_date"`
 		WorkFromAny bool   `json:"is_work_from_home"`
 		Hybrid      bool   `json:"is_hybrid"`
@@ -116,6 +119,28 @@ func urlQueryEscape(s string) string {
 	return b.String()
 }
 
+// kalibrrURL builds the posting's public address.
+//
+// The company code is not decoration: /jobs/<id>/<slug> renders "This is not the
+// web page you are looking for" — a 200 with a shell, which is why curl alone
+// never caught it — while /c/<code>/jobs/<id>/<slug> renders the posting. Without
+// the code the link is dead on arrival, so it falls back to the company listing
+// rather than handing out an address that looks right and 404s in the browser.
+func kalibrrURL(id int, slug, companyCode string) string {
+	slug = strings.TrimSpace(slug)
+	companyCode = strings.TrimSpace(companyCode)
+	if companyCode == "" {
+		// Rare (50 of 50 sampled postings carried a code). A search for the title
+		// still lands the visitor on the posting; inventing a company-less address
+		// would land them on "page not available".
+		return "https://www.kalibrr.com/job-board?text=" + urlQueryEscape(slug)
+	}
+	if slug == "" {
+		return fmt.Sprintf("https://www.kalibrr.com/c/%s/jobs/%d", companyCode, id)
+	}
+	return fmt.Sprintf("https://www.kalibrr.com/c/%s/jobs/%d/%s", companyCode, id, slug)
+}
+
 // parseKalibrr is separate from the HTTP call so the parser can be tested
 // against a canned payload with no network.
 func parseKalibrr(body []byte) ([]Job, error) {
@@ -161,7 +186,7 @@ func parseKalibrr(body []byte) ([]Job, error) {
 			Company:     strings.TrimSpace(j.CompanyName),
 			Location:    loc,
 			Remote:      remote,
-			URL:         fmt.Sprintf("https://www.kalibrr.com/jobs/%d/%s", j.ID, j.Slug),
+			URL:         kalibrrURL(j.ID, j.Slug, j.Company.Code),
 			Description: truncate(desc, 6000),
 			Tags:        tags,
 			PublishedAt: parseTime(j.Activation),
