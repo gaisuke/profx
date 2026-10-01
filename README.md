@@ -77,6 +77,14 @@ pipeline is provider-agnostic:
 
 ## Deployment
 
+nginx splits the two shapes of traffic: `/profx/api/v1/documents` and
+`/profx/api/v1/evaluations` (the expensive recruiter path) sit in the strict
+rate-limit zone with a 25 MB body cap, while everything else under
+`/profx/api/` shares the general zone. When a path moves, these location blocks
+have to move with it — after the /v1 rename they briefly pointed at URLs that no
+longer existed, which silently moved the upload and evaluation endpoints into the
+looser zone.
+
 Runs as a systemd unit with its own database and its own env file:
 
 ```bash
