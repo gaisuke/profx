@@ -210,6 +210,15 @@ func (r *JobRepository) CountCreatedSince(since time.Time) (int, error) {
 // ListRecent returns the most recent evaluations, newest first, for the history
 // view. Bounded by the caller so one request cannot dump the whole table.
 func (r *JobRepository) ListRecent(limit int) ([]models.EvaluationJob, error) {
+	return r.ListRange(limit, 0)
+}
+
+// ListRange adds an offset, which the REST list endpoint exposes as ?offset=.
+// Without it a client can only ever see the newest page.
+func (r *JobRepository) ListRange(limit, offset int) ([]models.EvaluationJob, error) {
+	if offset < 0 {
+		offset = 0
+	}
 	query := `
 		SELECT id, job_title, cv_document_id, report_document_id, status,
 			cv_match_rate, cv_feedback, project_score, project_feedback,
@@ -217,9 +226,9 @@ func (r *JobRepository) ListRecent(limit int) ([]models.EvaluationJob, error) {
 			created_at, updated_at, completed_at
 		FROM evaluation_jobs
 		ORDER BY created_at DESC
-		LIMIT $1
+		LIMIT $1 OFFSET $2
 	`
-	rows, err := r.db.Query(query, limit)
+	rows, err := r.db.Query(query, limit, offset)
 	if err != nil {
 		return nil, err
 	}

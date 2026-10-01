@@ -179,10 +179,12 @@ func (s *CariService) Quota(ctx context.Context, ip string) (models.CariQuota, e
 func (s *CariService) Search(ctx context.Context, ip, cvText string, location string, remoteOnly bool, keep int) (*models.CariRun, error) {
 	cvText = strings.TrimSpace(cvText)
 	if len(cvText) < MinCVChars {
-		return nil, fmt.Errorf("%w: isi CV minimal %d karakter (sekarang %d)", ErrCariValidation, MinCVChars, len(cvText))
+		return nil, validationErrorf(ErrCariValidation, "cv_text",
+			"isi CV minimal %d karakter (sekarang %d)", MinCVChars, len(cvText))
 	}
 	if len(cvText) > MaxCVChars {
-		return nil, fmt.Errorf("%w: isi CV terlalu panjang (maks %d karakter)", ErrCariValidation, MaxCVChars)
+		return nil, validationErrorf(ErrCariValidation, "cv_text",
+			"isi CV terlalu panjang (maks %d karakter)", MaxCVChars)
 	}
 	if keep <= 0 {
 		keep = s.cfg.Keep

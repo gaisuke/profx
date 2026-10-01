@@ -1,191 +1,55 @@
 # profx
-profx (pronounce Professor X) is an AI evaluator for job screening process. User input candidate's CV and returns a summarize of whether user match the job criteria or not.
 
-## Features
+profx (pronounce Professor X) adalah layanan Go yang menilai CV. Ada tiga permukaan:
 
-- RESTful API endpoint for uploading documents
-- Multipart form-data support for PDF files
-- Unique ID generation for each uploaded file
-- File validation and error handling
+- **`/v1/checks`** — pencari kerja menempelkan satu lowongan dan satu CV, lalu dapat
+  skor 0-100, tiga celah terbesar, dan satu contoh perbaikan. Publik, tanpa login.
+- **`/v1/searches`** — pencari kerja memasukkan CV, layanan mengambil lowongan
+  publik (Kalibrr untuk Indonesia, plus Remotive yang menerima pelamar dari
+  Indonesia), menyaringnya tanpa biaya model, lalu menilai kandidat teratas satu
+  per satu. Publik, tanpa login.
+- **`/v1/documents` + `/v1/evaluations`** — sisi perekrut: unggah CV dan laporan
+  proyek, jalankan evaluasi berlatarbelakang, ambil hasilnya.
 
-## Getting Started
+Seluruh permukaan itu REST dengan satu konvensi. Kontrak tertulisnya ada di
+[`docs/api-contract.md`](docs/api-contract.md), mesinnya di `internal/api`, dan
+spesifikasi OpenAPI yang bisa dicoba ada di **`/v1/openapi.yaml`** dengan UI-nya di
+`/profx/api/docs/`.
 
-### Prerequisites
+## Konvensi REST
 
-- Go 1.21 or higher
+- Jawaban sukses adalah representasi sumbernya langsung; tanpa pembungkus `ok`.
+- Jawaban galat selalu `{"error":{"code","message","details"}}`. `message` berbahasa
+  Indonesia dan boleh ditampilkan apa adanya; `details[].field` menyebut ruas mana
+  yang salah, supaya frontend bisa menandai kotak isian yang tepat.
+- Setiap jawaban membawa `X-Request-Id` (dikirim klien dipakai ulang bila aman,
+  kalau tidak dibuat sendiri), dan endpoint berkuota membawa `X-RateLimit-Limit`,
+  `-Remaining`, `-Reset`.
+- CORS aktif untuk `/v1/*`; daftar origin diatur lewat `API_CORS_ORIGINS`
+  (bawaan `*`).
+- Jalur yang tidak ada dan metode yang salah pun dijawab dengan bentuk galat yang
+  sama — bukan teks polos bawaan `net/http`, justru dua jawaban itulah yang paling
+  sering ditemui saat integrasi.
 
-### Installation
-
-1. Clone the repository:
-```bash
-git clone https://github.com/gaisuke/profx.git
-cd profx
-```
-
-2. Install dependencies:
-```bash
-go mod download
-```
-
-3. Build the application:
-```bash
-go build -o profx-server main.go
-```
-
-### Running the Server
-
-Start the server:
-```bash
-./profx-server
-```
-
-The server will start on port 8080 by default. You can customize the port by setting the `PORT` environment variable:
-```bash
-PORT=3000 ./profx-server
-```
-
-## API Documentation
-
-### POST /upload
-
-Upload candidate CV and project report documents.
-
-**Content-Type:** `multipart/form-data`
-
-**Request Parameters:**
-- `candidate_cv` (required): PDF file containing the candidate's CV
-- `project_report` (required): PDF file containing the project report
-
-**Success Response (201 Created):**
-```json
-{
-  "candidate_cv_id": "d6caccc4-35dc-4e2b-b1c3-4548bcc9e532",
-  "project_report_id": "fde18c07-d0f3-4db3-a607-84a257e5b233"
-}
-```
-
-**Error Response (4xx/5xx):**
-```json
-{
-  "error": "Error message describing what went wrong"
-}
-```
-
-**Example using curl:**
-```bash
-curl -X POST http://localhost:8080/upload \
-  -F "candidate_cv=@/path/to/cv.pdf" \
-  -F "project_report=@/path/to/report.pdf"
-```
-
-**Error Cases:**
-- `400 Bad Request`: Missing required files or non-PDF files
-- `405 Method Not Allowed`: Using HTTP method other than POST
-- `500 Internal Server Error`: Server-side error during file storage
-
-## Project Structure
-
-The project follows a clean architecture pattern with clear separation of concerns:
-
-```
-profx/
-├── main.go                           # Application entry point
-├── internal/                         # Internal application code
-│   ├── handlers/                     # HTTP handlers (presentation layer)
-│   │   └── upload_handler.go        # Upload endpoint handler
-│   ├── services/                     # Business logic layer
-│   │   └── document_service.go      # Document processing service
-│   ├── storage/                      # Storage layer (repository pattern)
-│   │   ├── storage.go                # Storage interface
-│   │   └── file_storage.go          # File system implementation
-│   └── models/                       # Data models
-│       └── document.go               # Document-related models
-├── uploads/                          # Directory for uploaded files (gitignored)
-├── test_api.sh                       # API test script
-├── go.mod                            # Go module dependencies
-├── go.sum                            # Go module checksums
-└── README.md                         # This file
-```
-
-### Architecture
-
-The application follows these design patterns:
-
-- **Layered Architecture**: Clear separation between handlers, services, and storage
-- **Dependency Injection**: Dependencies are injected through constructors
-- **Interface-based Design**: Storage layer uses interfaces for easy mocking and testing
-- **Repository Pattern**: Storage abstraction allows switching implementations (file system, S3, etc.)
-
-This structure makes the codebase:
-- Easy to test (each layer can be tested independently)
-- Maintainable (clear separation of concerns)
-- Scalable (easy to add new endpoints and features)
-- Flexible (easy to swap implementations)
-
-## Testing the API
-
-### Quick Test with cURL
-
-Test the upload endpoint with sample files:
+## Menjalankan
 
 ```bash
-# Make sure the server is running first
-./profx-server &
-
-# Upload both files
-curl -X POST http://localhost:8080/upload \
-  -F "candidate_cv=@/path/to/your/cv.pdf" \
-  -F "project_report=@/path/to/your/report.pdf"
+go build -o bin/profx . && sudo install -m 0755 bin/profx /usr/local/bin/profx
+sudo systemctl restart profx      # env di /etc/profx.env
 ```
 
-### Automated Test Suite
+Endpoint lokal: `http://127.0.0.1:8779/v1/health`. Publik:
+`https://danimunf.duckdns.org/profx/api/v1/health`.
 
-Run the included test script to validate all API functionality:
+### Melihat apa yang "dilihat" pencari lowongan
 
 ```bash
-# Make sure the server is running first
-./profx-server &
-
-# Run the test suite
-./test_api.sh
+go run ./cmd/probe -cv /tmp/cv.txt
 ```
 
-The test suite validates:
-- ✓ Successful file upload with valid PDFs
-- ✓ Error handling for missing files
-- ✓ HTTP method validation
-- ✓ File type validation (PDF only)
-
-## Development
-
-### Running Tests
-
-```bash
-go test ./...
-```
-
-### Building for Production
-
-```bash
-go build -ldflags="-s -w" -o profx-server main.go
-```
-
-### Adding New Endpoints
-
-Thanks to the layered architecture, adding new endpoints is straightforward:
-
-1. **Add Model** (if needed): Define your request/response structures in `internal/models/`
-2. **Add Storage** (if needed): Implement storage operations in `internal/storage/`
-3. **Add Service**: Implement business logic in `internal/services/`
-4. **Add Handler**: Create HTTP handler in `internal/handlers/`
-5. **Register Route**: Register the handler in `main.go`
-
-Example of registering a new handler:
-```go
-// In main.go
-newHandler := handlers.NewYourHandler(yourService)
-http.Handle("/your-endpoint", newHandler)
-```
+Mengambil dari board sungguhan, mencetak jumlah per sumber dan negara teratas,
+lalu daftar pendek beserta skor relevansi dan faktor keterjangkauannya — tanpa
+panggilan model, tanpa database, tanpa memakai kuota.
 
 ## Testing and evaluation
 
@@ -238,19 +102,19 @@ evaluation is produced without rubric context. The prompt then tells the model n
 to invent criteria and to prefix its feedback with `RUBRIC UNAVAILABLE:`, so a
 reviewer can see the score was made without the rubric.
 
-## Public CV check (/cek)
+## Public CV check (`/v1/checks`)
 
-`/cek` is the self-service side of profx: a job seeker pastes a job description
+`/v1/checks` is the self-service side of profx: a job seeker pastes a job description
 and their CV and gets a score, three concrete gaps, and one rewritten line. It
 needs no account, no rubric corpus (the job description *is* the rubric), and no
 Ragie — the retrieval path exists for the recruiter-side pipeline, and a visitor
 has already handed us the only criteria that matter.
 
 ```
-POST /cek              multipart: job_desc, cv_text or cv_file (PDF), job_title
-GET  /cek/hasil/{id}   the stored result, while it is still alive
-GET  /cek/info         quota left for this visitor
-POST /cek/minat        interest in the paid part (waitlist)
+POST /v1/checks               multipart or JSON: job_desc, cv_text or cv_file (PDF), job_title
+GET  /v1/checks/{id}          the stored result, while it is still alive
+GET  /v1/checks/limits        quota left for this visitor
+POST /v1/checks/{id}/interest interest in the paid part (waitlist)
 ```
 
 What is stored, and what is not:
@@ -276,14 +140,14 @@ The result id is 80 bits of randomness in base32, because the id is the only
 thing protecting a result page.
 
 
-## Job matching (/cari)
+## Job matching (`/v1/searches`)
 
 The second self-service path: a CV goes in, ranked postings come out.
 
 ```
-POST /cari             multipart: cv_text or cv_file (PDF), lokasi, hanya_remote, jumlah
-GET  /cari/hasil/{id}  status, progress, and the ranked results
-GET  /cari/info        searches left for this visitor
+POST /v1/searches        multipart or JSON: cv_text or cv_file (PDF), location, remote_only, max_results
+GET  /v1/searches/{id}   status, progress, and the ranked results
+GET  /v1/searches/limits searches left for this visitor
 ```
 
 **Two stages, because the model is the expensive part.** 579 postings arrive in
@@ -350,12 +214,15 @@ themselves are stored (they are public), results expire after `CARI_TTL_HOURS`
 ### Health and diagnostics
 
 ```
-GET /healthz          # liveness + which integrations are wired (provider, ragie)
-GET /retrieval-check  # one live retrieval, plus the corpus metadata and how
+GET /v1/health  # liveness, provider, sources, rubric-corpus metadata, and the
+                # quotas. The corpus block replaces the old /retrieval-check:
+                # a filter that matches nothing makes every evaluation run
+                # without a rubric, and the only visible symptom is softer
+                # feedback. It used to print
                       # many documents each configured filter actually matches
 ```
 
-`/retrieval-check` exists because a filter mismatch is otherwise invisible:
+The corpus block in `/v1/health` exists because a filter mismatch is otherwise invisible:
 retrieval answers 200 with an empty result, the pipeline scores without a rubric,
 and the only symptom is softer feedback. The check prints the corpus's real
 metadata values next to the filter being sent, so the mismatch is one request
@@ -380,7 +247,7 @@ Setting it turns on public-demo behaviour:
 - `GET /results` (history) returns `403`: a public demo must not list other
   visitors' evaluations. Individual results stay reachable by their UUID, which
   is the id the visitor already holds.
-- `GET /healthz` reports `demo: {enabled, used, limit, remaining, resets_at}` and
+- `GET /v1/health` reports the demo allowance and every quota the caller can spend
   the UI shows the remaining count plus a "do not upload real personal data"
   notice. A quota nobody can see is indistinguishable from a bug.
 

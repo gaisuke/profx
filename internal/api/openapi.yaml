@@ -1,0 +1,824 @@
+openapi: 3.0.3
+info:
+  title: profx API
+  version: "1.0.0"
+  description: |
+    profx menilai CV terhadap sebuah lowongan, mencari lowongan publik yang cocok
+    dengan sebuah CV, dan mengevaluasi berkas lamaran di sisi perekrut.
+
+    Konvensi:
+    - Jawaban sukses adalah representasi sumbernya langsung (tanpa pembungkus `ok`).
+    - Jawaban galat selalu `{"error":{"code","message","details"}}`.
+      `message` berbahasa Indonesia dan boleh ditampilkan apa adanya ke pengguna.
+    - Setiap jawaban membawa `X-Request-Id`.
+    - Endpoint berkuota membawa `X-RateLimit-Limit`, `X-RateLimit-Remaining`,
+      `X-RateLimit-Reset`.
+    - CORS aktif; origin diatur lewat `API_CORS_ORIGINS` (bawaan `*`).
+
+    Kontrak tertulis: `docs/api-contract.md`.
+  contact:
+    name: Dani
+servers:
+  - url: https://danimunf.duckdns.org/profx/api
+    description: Produksi (nginx → 127.0.0.1:8779)
+  - url: http://127.0.0.1:8779
+    description: Lokal (hanya loopback)
+
+tags:
+  - name: checks
+    description: Cek CV gratis untuk pencari kerja (publik, tanpa login)
+  - name: searches
+    description: Pencarian lowongan publik untuk satu CV (publik, tanpa login)
+  - name: evaluations
+    description: Alur perekrut — unggah dokumen, jalankan evaluasi
+  - name: ops
+    description: Status layanan dan dokumentasi
+
+paths:
+  /v1/health:
+    get:
+      tags: [ops]
+      summary: Status layanan
+      description: Melaporkan provider model, sumber lowongan aktif, keadaan korpus rubrik, dan sisa kuota.
+      operationId: getHealth
+      responses:
+        "200":
+          description: Layanan hidup
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+              example:
+                status: ok
+                provider: opencodego
+                retrieval:
+                  enabled: true
+                  base_url: http://127.0.0.1:8780
+                  filter_key: type
+                  cv_filter_values: [cv]
+                  project_filter_values: [project]
+                sources: [kalibrr, remotive]
+                quotas:
+                  checks:
+                    per_ip_per_day: 3
+                    used: 1
+                    remaining: 2
+                    global_per_day: 100
+                    global_used: 4
+                    resets_at: "2026-10-02T00:00:00+07:00"
+                  searches:
+                    per_ip_per_day: 2
+                    used: 0
+                    remaining: 2
+                    global_per_day: 20
+                    global_used: 0
+                    resets_at: "2026-10-02T00:00:00+07:00"
+
+  /v1/openapi.yaml:
+    get:
+      tags: [ops]
+      summary: Dokumen ini
+      operationId: getOpenAPISpec
+      responses:
+        "200":
+          description: Spesifikasi OpenAPI 3.0.3
+          content:
+            application/yaml:
+              schema:
+                type: string
+
+  /v1/checks:
+    post:
+      tags: [checks]
+      summary: Cek satu CV terhadap satu deskripsi lowongan
+      description: |
+        Gratis dan tanpa login. Deskripsi lowongan menjadi rubriknya, jadi tidak ada
+        korpus yang dicari. Balasannya: skor 0-100, ringkasan, tepat tiga celah, dan
+        satu contoh perbaikan.
+
+        **CV dan deskripsi lowongan tidak disimpan.** Yang tersimpan hanya hasil ini,
+        dan itu terhapus otomatis pada `expires_at` (bawaan 24 jam).
+      operationId: createCheck
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CheckCreateRequest"
+            example:
+              job_title: Backend Engineer (Go)
+              job_desc: "Kami mencari backend engineer dengan Go, PostgreSQL, Kubernetes..."
+              cv_text: "Budi Santoso — backend engineer, empat tahun Go dan PostgreSQL..."
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                job_title:
+                  type: string
+                job_desc:
+                  type: string
+                  description: Wajib, minimal 80 karakter.
+                cv_text:
+                  type: string
+                  description: Teks CV. Isi salah satu dari cv_text atau cv_file.
+                cv_file:
+                  type: string
+                  format: binary
+                  description: PDF. Dibaca di memori lalu dibuang, tidak ditulis ke disk.
+                cf-turnstile-response:
+                  type: string
+                  description: Hanya diperlukan bila TURNSTILE_SECRET diaktifkan.
+      responses:
+        "200":
+          description: Hasil penilaian
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Check"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/QuotaExceeded"
+        "502":
+          $ref: "#/components/responses/UpstreamFailed"
+
+  /v1/checks/limits:
+    get:
+      tags: [checks]
+      summary: Sisa jatah cek gratis untuk pemanggil ini
+      operationId: getCheckLimits
+      responses:
+        "200":
+          description: Kuota
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Limits"
+
+  /v1/checks/{id}:
+    get:
+      tags: [checks]
+      summary: Ambil hasil cek yang masih berlaku
+      operationId: getCheck
+      parameters:
+        - $ref: "#/components/parameters/CheckId"
+      responses:
+        "200":
+          description: Hasil cek
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Check"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/checks/{id}/interest:
+    post:
+      tags: [checks]
+      summary: Tinggalkan kontak untuk bagian berbayar
+      description: Daftar tunggu. Bagian perbaikan penuh belum dibuka, dan tidak ada tombol beli palsu.
+      operationId: registerCheckInterest
+      parameters:
+        - $ref: "#/components/parameters/CheckId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contact]
+              properties:
+                contact:
+                  type: string
+                  description: WhatsApp atau email, minimal 5 karakter.
+                  example: "0812-3456-7890"
+                note:
+                  type: string
+                  example: "CV saya kurang angka hasil kerja"
+      responses:
+        "201":
+          description: Tercatat
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  check_id:
+                    type: string
+                  status:
+                    type: string
+                    example: recorded
+        "400":
+          $ref: "#/components/responses/ValidationError"
+
+  /v1/searches:
+    post:
+      tags: [searches]
+      summary: Mulai pencarian lowongan untuk satu CV
+      description: |
+        Mengambil lowongan publik (Kalibrr untuk Indonesia, plus Remotive yang menerima
+        pelamar dari Indonesia), menyaringnya tanpa biaya model, lalu menilai belasan
+        kandidat teratas satu per satu. Karena itu jawabannya `202` dengan id, bukan
+        hasil: pantau lewat `GET /v1/searches/{id}`.
+
+        **CV tidak disimpan** — hanya sidik jarinya, yang membuat skor bisa dipakai ulang
+        tanpa menyimpan CV. Hasil terhapus otomatis pada `expires_at` (bawaan 48 jam).
+      operationId: createSearch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SearchCreateRequest"
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                cv_text:
+                  type: string
+                cv_file:
+                  type: string
+                  format: binary
+                location:
+                  type: string
+                  example: Indonesia
+                remote_only:
+                  type: boolean
+                max_results:
+                  type: integer
+                  minimum: 5
+                  maximum: 25
+      responses:
+        "202":
+          description: Pencarian diterima dan mulai berjalan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchAccepted"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/QuotaExceeded"
+
+  /v1/searches/limits:
+    get:
+      tags: [searches]
+      summary: Sisa jatah pencarian gratis untuk pemanggil ini
+      operationId: getSearchLimits
+      responses:
+        "200":
+          description: Kuota
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Limits"
+
+  /v1/searches/{id}:
+    get:
+      tags: [searches]
+      summary: Status dan hasil pencarian
+      description: Selama `status` masih `running`, `results` boleh kosong atau sebagian.
+      operationId: getSearch
+      parameters:
+        - $ref: "#/components/parameters/SearchId"
+      responses:
+        "200":
+          description: Pencarian
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Search"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/documents:
+    post:
+      tags: [evaluations]
+      summary: Unggah dua berkas PDF untuk evaluasi
+      operationId: uploadDocuments
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [candidate_cv, project_report]
+              properties:
+                candidate_cv:
+                  type: string
+                  format: binary
+                project_report:
+                  type: string
+                  format: binary
+      responses:
+        "201":
+          description: Tersimpan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  candidate_cv_id:
+                    type: string
+                  project_report_id:
+                    type: string
+              example:
+                candidate_cv_id: d6caccc4-35dc-4e2b-b1c3-4548bcc9e532
+                project_report_id: fde18c07-d0f3-4db3-a607-84a257e5b233
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+
+  /v1/evaluations:
+    post:
+      tags: [evaluations]
+      summary: Jalankan evaluasi atas dokumen yang sudah diunggah
+      operationId: createEvaluation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [job_title, cv_document_id, report_document_id]
+              properties:
+                job_title:
+                  type: string
+                  example: Backend Engineer
+                cv_document_id:
+                  type: string
+                report_document_id:
+                  type: string
+      responses:
+        "202":
+          description: Diterima, diproses di latar belakang
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvaluationAccepted"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/QuotaExceeded"
+    get:
+      tags: [evaluations]
+      summary: Daftar evaluasi terbaru
+      description: Dinonaktifkan (403) pada deployment demo publik, supaya hasil orang lain tidak bisa dibaca.
+      operationId: listEvaluations
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Daftar
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvaluationList"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "403":
+          description: Riwayat dimatikan pada deployment publik
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/evaluations/{id}:
+    get:
+      tags: [evaluations]
+      summary: Hasil satu evaluasi
+      operationId: getEvaluation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Evaluasi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Evaluation"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+components:
+  parameters:
+    CheckId:
+      name: id
+      in: path
+      required: true
+      description: Id hasil cek, 80 bit acak dalam base32.
+      schema:
+        type: string
+      example: fcjeadojrlqtoosh
+    SearchId:
+      name: id
+      in: path
+      required: true
+      description: Id pencarian.
+      schema:
+        type: string
+      example: oxjd7pxuxhdnwoiw
+
+  responses:
+    ValidationError:
+      description: Isi permintaan tidak memenuhi syarat
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: validation_failed
+              message: "isi CV minimal 200 karakter (sekarang 140)"
+              details:
+                - field: cv_text
+                  reason: "isi CV minimal 200 karakter (sekarang 140)"
+    NotFound:
+      description: Id tidak dikenal atau sudah kedaluwarsa
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: not_found
+              message: "hasil cek ini sudah tidak ada. Hasil gratis disimpan 24 jam."
+    QuotaExceeded:
+      description: Jatah gratis harian habis
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: quota_exceeded
+              message: "cek: kuota gratis habis: batas 3 cek gratis per orang per hari sudah terpakai, kuota direset 2026-10-02T00:00:00+07:00"
+    UpstreamFailed:
+      description: Model atau sumber data gagal; kuota tidak terpakai
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: upstream_failed
+              message: "penilaian gagal dijalankan (server penilai sedang lambat atau mati). Kuota cek gratis kamu tidak terpakai — coba lagi sebentar lagi."
+    UnsupportedMediaType:
+      description: Tipe isi tidak dikenal endpoint ini
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum: [validation_failed, not_found, quota_exceeded, rate_limited, method_not_allowed, unsupported_media_type, payload_too_large, upstream_failed, forbidden, internal_error]
+            message:
+              type: string
+              description: Bahasa Indonesia, aman ditampilkan ke pengguna.
+            details:
+              type: array
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                  reason:
+                    type: string
+
+    Limits:
+      type: object
+      properties:
+        per_ip_per_day:
+          type: integer
+        used:
+          type: integer
+        remaining:
+          type: integer
+        global_per_day:
+          type: integer
+        global_used:
+          type: integer
+        resets_at:
+          type: string
+          format: date-time
+
+    Links:
+      type: object
+      properties:
+        self:
+          type: string
+          description: URL API hasil ini
+        page:
+          type: string
+          description: Halaman yang bisa dibuka manusia
+
+    Gap:
+      type: object
+      properties:
+        section:
+          type: string
+          example: Keahlian
+        problem:
+          type: string
+          example: Kubernetes tidak dibuktikan di lingkungan produksi
+        fix:
+          type: string
+          example: Sebut peran konkret pada cluster produksi yang kamu pegang
+
+    SampleFix:
+      type: object
+      properties:
+        before:
+          type: string
+        after:
+          type: string
+        reason:
+          type: string
+
+    CheckCreateRequest:
+      type: object
+      required: [job_desc]
+      properties:
+        job_title:
+          type: string
+        job_desc:
+          type: string
+          minLength: 80
+        cv_text:
+          type: string
+          minLength: 200
+        turnstile_token:
+          type: string
+
+    Check:
+      type: object
+      properties:
+        id:
+          type: string
+        job_title:
+          type: string
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+        result:
+          type: object
+          description: Ruas berbahasa Inggris; isi penilaiannya tetap bahasa Indonesia.
+          properties:
+            score:
+              type: integer
+            summary:
+              type: string
+            gaps:
+              type: array
+              description: Selalu tepat tiga.
+              items:
+                $ref: "#/components/schemas/Gap"
+            sample_fix:
+              $ref: "#/components/schemas/SampleFix"
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        links:
+          $ref: "#/components/schemas/Links"
+
+    SearchCreateRequest:
+      type: object
+      required: [cv_text]
+      properties:
+        cv_text:
+          type: string
+          minLength: 200
+        location:
+          type: string
+          example: Indonesia
+        remote_only:
+          type: boolean
+          default: false
+        max_results:
+          type: integer
+          minimum: 5
+          maximum: 25
+          default: 10
+
+    SearchAccepted:
+      type: object
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum: [running, done, failed]
+        message:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+
+    Job:
+      type: object
+      properties:
+        title:
+          type: string
+        company:
+          type: string
+        location:
+          type: string
+        remote:
+          type: boolean
+        source:
+          type: string
+          enum: [kalibrr, remotive, remoteok, arbeitnow]
+        url:
+          type: string
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    SearchResult:
+      type: object
+      properties:
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+        reason:
+          type: string
+        gaps:
+          type: array
+          items:
+            type: string
+        job:
+          $ref: "#/components/schemas/Job"
+
+    Search:
+      type: object
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum: [running, done, failed]
+        message:
+          type: string
+        progress:
+          type: object
+          properties:
+            scored:
+              type: integer
+            total:
+              type: integer
+        results:
+          type: array
+          description: Terurut skor tertinggi dulu; boleh kosong selama berjalan.
+          items:
+            $ref: "#/components/schemas/SearchResult"
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        links:
+          $ref: "#/components/schemas/Links"
+
+    EvaluationAccepted:
+      type: object
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum: [queued, processing, completed, failed]
+        job_title:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    Evaluation:
+      type: object
+      properties:
+        id:
+          type: string
+        job_title:
+          type: string
+        status:
+          type: string
+          enum: [queued, processing, completed, failed]
+        cv_match_rate:
+          type: number
+          format: float
+          nullable: true
+          description: 0.00-1.00; null selama belum selesai.
+        cv_feedback:
+          type: string
+          nullable: true
+        project_score:
+          type: number
+          format: float
+          nullable: true
+          description: Skala rubrik, biasanya 1.00-5.00.
+        project_feedback:
+          type: string
+          nullable: true
+        overall_summary:
+          type: string
+          nullable: true
+        error_message:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    EvaluationList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Evaluation"
+        meta:
+          type: object
+          properties:
+            limit:
+              type: integer
+            offset:
+              type: integer
+            count:
+              type: integer
+
+    Health:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+        provider:
+          type: string
+          example: opencodego
+        retrieval:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+            base_url:
+              type: string
+            filter_key:
+              type: string
+            cv_filter_values:
+              type: array
+              items:
+                type: string
+            project_filter_values:
+              type: array
+              items:
+                type: string
+        sources:
+          type: array
+          items:
+            type: string
+        quotas:
+          type: object
+          properties:
+            checks:
+              $ref: "#/components/schemas/Limits"
+            searches:
+              $ref: "#/components/schemas/Limits"

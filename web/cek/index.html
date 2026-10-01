@@ -182,20 +182,25 @@
 </main>
 
 <script>
-const API = "/profx/api";
+const API = "/profx/api/v1";
 const $ = (id) => document.getElementById(id);
 let lastId = null;
 
 function showErr(msg) { const e = $("err"); e.textContent = msg; e.classList.remove("hidden"); }
 function hideErr() { $("err").classList.add("hidden"); }
 
+// The API answers {"error":{"code","message","details"}}. The message is written
+// for the visitor, so it is shown as-is; the code is what a program branches on.
+function apiError(d, fallback) {
+  return (d && d.error && d.error.message) || fallback;
+}
+
 async function loadQuota() {
   try {
-    const r = await fetch(API + "/cek/info");
-    const d = await r.json();
-    const q = d.kuota || {};
-    if (q.per_ip_limit > 0) {
-      $("quota").textContent = "Sisa " + q.remaining + " dari " + q.per_ip_limit + " cek gratis hari ini per pengunjung.";
+    const r = await fetch(API + "/checks/limits");
+    const q = await r.json();
+    if (q.per_ip_per_day > 0) {
+      $("quota").textContent = "Sisa " + q.remaining + " dari " + q.per_ip_per_day + " cek gratis hari ini per pengunjung.";
     } else {
       $("quota").textContent = "Cek gratis tanpa batas per pengunjung.";
     }
@@ -211,29 +216,29 @@ function band(skor) {
 }
 
 function render(d) {
-  const h = d.hasil || {};
-  const [label, color] = band(d.skor);
-  $("score").innerHTML = d.skor + '<small>/100</small>';
+  const h = d.result || {};
+  const [label, color] = band(d.score);
+  $("score").innerHTML = d.score + '<small>/100</small>';
   $("score").style.color = color;
   const pill = $("pill");
   pill.textContent = label + " · " + (d.job_title || "lowongan");
   pill.style.color = color;
-  $("ringkasan").textContent = h.ringkasan || "";
-  $("gaps").innerHTML = (h.celah || []).map((g) => `
+  $("ringkasan").textContent = h.summary || "";
+  $("gaps").innerHTML = (h.gaps || []).map((g) => `
     <div class="gap">
-      <div class="bagian">${escapeHtml(g.bagian)}</div>
-      <div class="masalah">${escapeHtml(g.masalah)}</div>
-      <div class="perbaikan">→ ${escapeHtml(g.perbaikan)}</div>
+      <div class="bagian">${escapeHtml(g.section)}</div>
+      <div class="masalah">${escapeHtml(g.problem)}</div>
+      <div class="perbaikan">→ ${escapeHtml(g.fix)}</div>
     </div>`).join("");
-  const c = h.contoh_perbaikan || {};
+  const c = h.sample_fix || {};
   $("contoh").innerHTML = `
     <div class="fix">
-      <div class="seb">${escapeHtml(c.sebelum || "")}</div>
-      <div class="ses">${escapeHtml(c.sesudah || "")}</div>
-      <div class="why">${escapeHtml(c.alasan || "")}</div>
+      <div class="seb">${escapeHtml(c.before || "")}</div>
+      <div class="ses">${escapeHtml(c.after || "")}</div>
+      <div class="why">${escapeHtml(c.reason || "")}</div>
     </div>`;
   lastId = d.id;
-  const exp = d.kedaluwarsa ? new Date(d.kedaluwarsa) : null;
+  const exp = d.expires_at ? new Date(d.expires_at) : null;
   $("expiry").textContent = exp
     ? "Tautan hasil ini berlaku sampai " + exp.toLocaleString("id-ID") + ", lalu dihapus otomatis."
     : "";
@@ -255,12 +260,21 @@ $("copy").addEventListener("click", async () => {
 $("send").addEventListener("click", async () => {
   const contact = $("contact").value.trim();
   if (contact.length < 5) { showErr("Isi kontak dulu supaya bisa dikabari."); return; }
-  const body = new URLSearchParams({ check_id: lastId || "", contact: contact, note: $("note").value.trim() });
-  const r = await fetch(API + "/cek/minat", { method: "POST", body: body });
-  const d = await r.json();
-  if (!d.ok) { showErr(d.error || "gagal menyimpan"); return; }
-  $("interest").classList.add("hidden");
-  const ok = $("interest-ok"); ok.textContent = d.pesan || "Tercatat."; ok.classList.remove("hidden");
+  try {
+    const r = await fetch(API + "/checks/" + encodeURIComponent(lastId || "") + "/interest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contact: contact, note: $("note").value.trim() }),
+    });
+    const d = await r.json();
+    if (!r.ok && !(d && d.check_id)) { showErr(apiError(d, "gagal menyimpan")); return; }
+    $("interest").classList.add("hidden");
+    const ok = $("interest-ok");
+    ok.textContent = "Tercatat — kamu akan dikabari kalau bagian ini dibuka.";
+    ok.classList.remove("hidden");
+  } catch (e) {
+    showErr("Tidak bisa menghubungi server: " + e.message);
+  }
 });
 
 $("submit").addEventListener("click", async () => {
@@ -282,10 +296,10 @@ $("submit").addEventListener("click", async () => {
   $("loading").classList.remove("hidden");
   $("submit").disabled = true;
   try {
-    const r = await fetch(API + "/cek", { method: "POST", body: fd });
+    const r = await fetch(API + "/checks", { method: "POST", body: fd });
     const d = await r.json();
     $("loading").classList.add("hidden");
-    if (!d.ok) { showErr(d.error || "penilaian gagal, coba lagi"); return; }
+    if (!r.ok) { showErr(apiError(d, "penilaian gagal, coba lagi")); return; }
     render(d);
     loadQuota();
   } catch (e) {

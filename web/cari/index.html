@@ -154,13 +154,19 @@
 </main>
 
 <script>
-const API = "/profx/api/cari";
+const API = "/profx/api/v1";
 const $ = (id) => document.getElementById(id);
 let pollTimer = null;
 let lastId = null;
 
 function showErr(msg) { const e = $("err"); e.textContent = msg; e.classList.remove("hidden"); }
 function hideErr() { $("err").classList.add("hidden"); }
+
+// The API answers {"error":{"code","message","details"}}; the message is meant
+// for the visitor, so it goes on screen unchanged.
+function apiError(d, fallback) {
+  return (d && d.error && d.error.message) || fallback;
+}
 
 function escapeHtml(s) {
   return String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
@@ -169,11 +175,10 @@ function escapeHtml(s) {
 
 async function loadQuota() {
   try {
-    const r = await fetch(API + "/info");
-    const d = await r.json();
-    const q = d.kuota || {};
-    if (q.per_ip_limit > 0) {
-      $("quota").textContent = "Sisa " + q.remaining + " dari " + q.per_ip_limit + " pencarian gratis hari ini per pengunjung.";
+    const r = await fetch(API + "/searches/limits");
+    const q = await r.json();
+    if (q.per_ip_per_day > 0) {
+      $("quota").textContent = "Sisa " + q.remaining + " dari " + q.per_ip_per_day + " pencarian gratis hari ini per pengunjung.";
     } else {
       $("quota").textContent = "Pencarian gratis tanpa batas per pengunjung.";
     }
@@ -196,12 +201,12 @@ function tanggalId(iso) {
 }
 
 function kartuLowongan(it) {
-  const low = it.lowongan || {};
-  const skor = Number(it.skor);
+  const low = it.job || {};
+  const skor = Number(it.score);
   const warna = band(skor);
   const remote = low.remote ? ' <span class="pill">remote</span>' : "";
-  const tgl = tanggalId(low.terbit);
-  const celah = Array.isArray(it.celah) ? it.celah : [];
+  const tgl = tanggalId(low.published_at);
+  const celah = Array.isArray(it.gaps) ? it.gaps : [];
   const celahHtml = celah.length
     ? '<ul class="celah">' + celah.map((c) => "<li>→ " + escapeHtml(c) + "</li>").join("") + "</ul>"
     : "";
@@ -211,25 +216,26 @@ function kartuLowongan(it) {
       <div class="job-top">
         <div class="badge" style="color:${warna}">${skor}<small>/100</small></div>
         <div class="job-head">
-          <div class="job-title">${escapeHtml(low.judul || "Lowongan")}</div>
+          <div class="job-title">${escapeHtml(low.title || "Lowongan")}</div>
           <div class="job-meta">
-            ${escapeHtml(low.perusahaan || "Perusahaan tidak dicantumkan")}
-            · ${escapeHtml(low.lokasi || "Lokasi tidak dicantumkan")}${remote}
-            · sumber: ${escapeHtml(low.sumber || "tidak diketahui")}${tgl ? " · terbit " + escapeHtml(tgl) : ""}
+            ${escapeHtml(low.company || "Perusahaan tidak dicantumkan")}
+            · ${escapeHtml(low.location || "Lokasi tidak dicantumkan")}${remote}
+            · sumber: ${escapeHtml(low.source || "tidak diketahui")}${tgl ? " · terbit " + escapeHtml(tgl) : ""}
           </div>
         </div>
       </div>
-      <p class="job-alasan">${escapeHtml(it.alasan || "")}</p>
+      <p class="job-alasan">${escapeHtml(it.reason || "")}</p>
       ${celahHtml}
       ${url ? '<div class="job-actions"><a class="link" href="' + escapeHtml(url) + '" target="_blank" rel="noopener">Buka lowongan</a></div>' : ""}
     </div>`;
 }
 
 function renderHasil(d) {
-  const list = Array.isArray(d.hasil) ? d.hasil : [];
-  $("ringkasan").textContent = "Dinilai " + (d.total != null ? d.total : list.length) + " lowongan, " +
+  const list = Array.isArray(d.results) ? d.results : [];
+  const dinilai = d.progress ? Number(d.progress.total) || 0 : 0;
+  $("ringkasan").textContent = "Dinilai " + dinilai + " lowongan, " +
     list.length + " terbaik ditampilkan di bawah (skor tertinggi di atas).";
-  const exp = d.kedaluwarsa ? new Date(d.kedaluwarsa) : null;
+  const exp = d.expires_at ? new Date(d.expires_at) : null;
   $("expiry").textContent = (exp && !isNaN(exp.getTime()))
     ? "Hasil ini berlaku sampai " + exp.toLocaleString("id-ID") + ", lalu dihapus otomatis."
     : "";
@@ -249,28 +255,28 @@ function stopPoll() { if (pollTimer) { clearInterval(pollTimer); pollTimer = nul
 async function poll() {
   if (!lastId) return;
   try {
-    const r = await fetch(API + "/hasil/" + encodeURIComponent(lastId));
+    const r = await fetch(API + "/searches/" + encodeURIComponent(lastId));
     const d = await r.json();
-    if (!d.ok) {
+    if (!r.ok) {
       stopPoll();
       $("loading").classList.add("hidden");
-      showErr(d.error || "hasil tidak ditemukan atau sudah kedaluwarsa.");
+      showErr(apiError(d, "hasil tidak ditemukan atau sudah kedaluwarsa."));
       return;
     }
-    const total = Number(d.total) || 0;
-    const selesai = Number(d.selesai) || 0;
-    $("progress-teks").textContent = "Menilai lowongan… " + selesai + " dari " + total;
-    $("bar").style.width = (total > 0 ? Math.min(100, Math.round((selesai / total) * 100)) : 0) + "%";
+    const total = d.progress ? Number(d.progress.total) || 0 : 0;
+    const dinilai = d.progress ? Number(d.progress.scored) || 0 : 0;
+    $("progress-teks").textContent = "Menilai lowongan… " + dinilai + " dari " + total;
+    $("bar").style.width = (total > 0 ? Math.min(100, Math.round((dinilai / total) * 100)) : 0) + "%";
 
-    if (d.status === "selesai") {
+    if (d.status === "done") {
       stopPoll();
       $("loading").classList.add("hidden");
       renderHasil(d);
       loadQuota();
-    } else if (d.status === "gagal") {
+    } else if (d.status === "failed") {
       stopPoll();
       $("loading").classList.add("hidden");
-      showErr((d.pesan || "Pencarian gagal diproses.") + (d.hitung_ulang ? "" : " Coba lagi sebentar lagi."));
+      showErr((d.message || "Pencarian gagal diproses.") + " Coba lagi sebentar lagi.");
       $("submit").disabled = false;
     }
   } catch (e) {
@@ -292,9 +298,9 @@ $("submit").addEventListener("click", async () => {
   const fd = new FormData();
   if (cvText) fd.append("cv_text", cvText);
   if (file) fd.append("cv_file", file);
-  fd.append("lokasi", $("lokasi").value.trim());
-  fd.append("hanya_remote", $("hanya_remote").checked ? "true" : "false");
-  fd.append("jumlah", String(jumlah));
+  fd.append("location", $("lokasi").value.trim());
+  fd.append("remote_only", $("hanya_remote").checked ? "true" : "false");
+  fd.append("max_results", String(jumlah));
 
   stopPoll();
   $("result").classList.add("hidden");
@@ -306,11 +312,11 @@ $("submit").addEventListener("click", async () => {
   $("submit").disabled = true;
 
   try {
-    const r = await fetch(API, { method: "POST", body: fd });
+    const r = await fetch(API + "/searches", { method: "POST", body: fd });
     const d = await r.json();
-    if (!d.ok) {
+    if (!r.ok) {
       $("loading").classList.add("hidden");
-      showErr(d.error || "pencarian gagal, coba lagi.");
+      showErr(apiError(d, "pencarian gagal, coba lagi."));
       $("submit").disabled = false;
       return;
     }

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Test script for profx API
-# This script tests the /upload endpoint with sample PDF files
+# Tests the REST surface (v1) with sample PDF files.
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -11,7 +11,7 @@ NC='\033[0m' # No Color
 
 # API endpoint
 BASE_URL="${BASE_URL:-http://localhost:8080}"
-UPLOAD_URL="$BASE_URL/upload"
+UPLOAD_URL="$BASE_URL/v1/documents"
 
 echo "================================================"
 echo "          profx API Test Script"

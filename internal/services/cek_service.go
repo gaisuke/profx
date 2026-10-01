@@ -199,7 +199,8 @@ func (s *CekService) Result(ctx context.Context, id string) (*models.PublicCheck
 func (s *CekService) Interest(ctx context.Context, checkID, contact, note string) error {
 	contact = strings.TrimSpace(contact)
 	if len(contact) < 5 {
-		return fmt.Errorf("%w: isi kontak (WhatsApp atau email) supaya bisa dikabari", ErrCekValidation)
+		return validationErrorf(ErrCekValidation, "contact",
+			"isi kontak (WhatsApp atau email) supaya bisa dikabari")
 	}
 	if len(contact) > 200 {
 		contact = contact[:200]
@@ -255,16 +256,20 @@ func ExtractPDFText(data []byte) (string, error) {
 
 func validateCekInput(jobDesc, cvText string) error {
 	if len(jobDesc) < MinJobDescChars {
-		return fmt.Errorf("%w: deskripsi lowongan minimal %d karakter supaya bisa dinilai dengan jujur", ErrCekValidation, MinJobDescChars)
+		return validationErrorf(ErrCekValidation, "job_desc",
+			"deskripsi lowongan minimal %d karakter supaya bisa dinilai dengan jujur", MinJobDescChars)
 	}
 	if len(jobDesc) > MaxJobDescChars {
-		return fmt.Errorf("%w: deskripsi lowongan terlalu panjang (maks %d karakter)", ErrCekValidation, MaxJobDescChars)
+		return validationErrorf(ErrCekValidation, "job_desc",
+			"deskripsi lowongan terlalu panjang (maks %d karakter)", MaxJobDescChars)
 	}
 	if len(cvText) < MinCVChars {
-		return fmt.Errorf("%w: isi CV minimal %d karakter (sekarang %d)", ErrCekValidation, MinCVChars, len(cvText))
+		return validationErrorf(ErrCekValidation, "cv_text",
+			"isi CV minimal %d karakter (sekarang %d)", MinCVChars, len(cvText))
 	}
 	if len(cvText) > MaxCVChars {
-		return fmt.Errorf("%w: isi CV terlalu panjang (maks %d karakter)", ErrCekValidation, MaxCVChars)
+		return validationErrorf(ErrCekValidation, "cv_text",
+			"isi CV terlalu panjang (maks %d karakter)", MaxCVChars)
 	}
 	return nil
 }
