@@ -52,22 +52,52 @@ type Source interface {
 	Fetch(ctx context.Context, q Query) ([]Job, error)
 }
 
-// DefaultSources are the boards reachable from this host without an API key or
-// a proxy: verified live, with the reason for each exclusion next to it.
-//
-//	remotive, remoteok, arbeitnow — open JSON APIs, remote-heavy, worldwide
-//	kalibrr                       — South-East Asia board, the local-market one
+// Sources are the boards reachable from this host without an API key or a proxy.
 //
 // Excluded on purpose: id.jobstreet.com and glints.com answer 403 to this host
 // (Cloudflare), and scraping LinkedIn's HTML works but is both brittle and a
 // terms-of-service problem we are not going to take on for a first version.
-func DefaultSources() []Source {
-	return []Source{
-		NewKalibrr(),
-		NewRemotive(),
-		NewRemoteOK(),
-		NewArbeitnow(),
+func Sources() []Source {
+	return []Source{NewKalibrr(), NewRemotive(), NewRemoteOK(), NewArbeitnow()}
+}
+
+// DefaultSourceNames is the set this deployment runs with, and it is deliberately
+// short: the product is for candidates in Indonesia.
+//
+//	kalibrr  — the local market, and the only board here that says which city a
+//	           job is in. 1,057 live postings for Indonesia when this was measured.
+//	remotive — kept for remote roles, but filtered to postings whose own
+//	           candidate_required_location admits Indonesia, Asia or anywhere.
+//
+// remoteok and arbeitnow are implemented, tested and switchable, but off by
+// default: remoteok's postings carry no eligibility signal (its location field is
+// empty or a US city, and an empty field is not evidence a candidate in Jakarta
+// can take the job), and arbeitnow's board is dominated by on-site German roles.
+// Serving those to an Indonesian candidate is how the first live run ended up
+// recommending Berlin on-site work.
+func DefaultSourceNames() []string {
+	return []string{"kalibrr", "remotive"}
+}
+
+// Select resolves source names to sources, ignoring names it does not know so a
+// typo in configuration narrows the set instead of breaking the service. An
+// empty result falls back to the defaults.
+func Select(names []string) []Source {
+	byName := map[string]Source{}
+	for _, s := range Sources() {
+		byName[s.Name()] = s
 	}
+	out := make([]Source, 0, len(names))
+	for _, n := range names {
+		n = strings.TrimSpace(strings.ToLower(n))
+		if s, ok := byName[n]; ok {
+			out = append(out, s)
+		}
+	}
+	if len(out) == 0 {
+		return Select(DefaultSourceNames())
+	}
+	return out
 }
 
 // client is shared: a browser User-Agent is not optional here, several of these

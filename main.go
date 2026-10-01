@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -171,7 +172,13 @@ func main() {
 	// come from public boards; the model only ever sees the dozen that a free
 	// keyword filter says are worth judging.
 	cariRepo := storage.NewCariRepository(db)
-	cariService := services.NewCariService(cariRepo, llmClient, jobs.DefaultSources(), services.CariConfig{
+	cariSources := jobs.Select(strings.Split(getEnv("CARI_SOURCES", strings.Join(jobs.DefaultSourceNames(), ",")), ","))
+	sourceNames := make([]string, 0, len(cariSources))
+	for _, s := range cariSources {
+		sourceNames = append(sourceNames, s.Name())
+	}
+	log.Printf("cari: sumber lowongan aktif: %s (fokus %s)", strings.Join(sourceNames, ", "), getEnv("CARI_HOME_COUNTRY", "Indonesia"))
+	cariService := services.NewCariService(cariRepo, llmClient, cariSources, services.CariConfig{
 		PerIPLimit:  getEnvAsInt("CARI_PER_IP_PER_DAY", 2),
 		GlobalLimit: getEnvAsInt("CARI_GLOBAL_PER_DAY", 20),
 		TTL:         time.Duration(getEnvAsInt("CARI_TTL_HOURS", 48)) * time.Hour,

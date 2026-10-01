@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -43,7 +44,95 @@ func (r *Remotive) Fetch(ctx context.Context, q Query) ([]Job, error) {
 	if err != nil {
 		return nil, err
 	}
-	return parseRemotive(body)
+	list, err := parseRemotive(body)
+	if err != nil {
+		return nil, err
+	}
+	// Remotive states who may apply, so unlike the other remote boards we can
+	// respect it. A posting restricted to "USA" or "Americas, Europe" is dropped
+	// here rather than judged and rejected later: spending a model call to learn
+	// that a Jakarta candidate cannot take a US-only job is waste.
+	out := make([]Job, 0, len(list))
+	for _, j := range list {
+		if OpenToIndonesia(j.Location) {
+			out = append(out, j)
+		}
+	}
+	return out, nil
+}
+
+// openHints are the phrases RemoteOK-style boards use when a role is not
+// geographically restricted. "Worldwide", regional groupings that include
+// South-East Asia, and Indonesia itself.
+var openHints = []string{
+	"worldwide", "anywhere", "global", "asia", "apac", "asean", "sea ",
+	"indonesia", "southeast asia", "south-east asia", "remote",
+}
+
+// OpenToIndonesia reports whether a posting's stated applicant location admits a
+// candidate in Indonesia. An empty value is treated as open: several boards leave
+// it blank when a role is unrestricted, and dropping those would lose real jobs.
+// Phrases naming a region we are not in (USA, Europe, LATAM, Eastern Time) are
+// rejected.
+func OpenToIndonesia(location string) bool {
+	loc := strings.ToLower(strings.TrimSpace(location))
+	if loc == "" {
+		return true
+	}
+	// A restriction we can recognise as foreign outweighs a generic word: a
+	// "Remote - US" posting contains both "remote" and "us". Country codes get
+	// their own pass because they appear as bare tokens ("Remote - US", "Berlin,
+	// DE") that no phrase list catches.
+	if hasClosedCountryCode(loc) {
+		return false
+	}
+	for _, closed := range closedHints {
+		if strings.Contains(loc, closed) {
+			return false
+		}
+	}
+	for _, hint := range openHints {
+		if strings.Contains(loc, hint) {
+			return true
+		}
+	}
+	return false
+}
+
+// closedCodes are two-letter country or region codes that mean "not Indonesia".
+// Codes that double as common English words are deliberately absent — "in", "my",
+// "id", "no", "it" — because "anywhere in the world" must not read as India.
+var closedCodes = map[string]bool{
+	"us": true, "usa": true, "uk": true, "eu": true, "emea": true, "latam": true,
+	"ca": true, "au": true, "de": true, "fr": true, "nl": true, "pl": true,
+	"il": true, "jp": true, "kr": true, "cn": true, "ph": true, "sg": true,
+	"nz": true, "br": true, "mx": true, "za": true, "ie": true, "at": true,
+	"ch": true, "se": true, "dk": true, "no": true, "fi": true, "pt": true,
+	"gr": true, "tr": true, "hk": true, "tw": true,
+}
+
+func hasClosedCountryCode(loc string) bool {
+	for _, tok := range countryCodeRE.FindAllString(loc, -1) {
+		if closedCodes[tok] {
+			return true
+		}
+	}
+	return false
+}
+
+// countryCodeRE splits a location into word-ish tokens so codes can be matched
+// exactly rather than as substrings ("us" must not match "australia").
+var countryCodeRE = regexp.MustCompile(`[a-z]{2,3}`)
+
+var closedHints = []string{
+	"usa", "u.s.", "united states", "america", "canada", "latam", "brazil",
+	"mexico", "europe", "emea", "united kingdom", "germany", "france", "spain",
+	"netherlands", "poland", "uk", " ireland", "israel", "africa", "australia",
+	"new zealand", "japan", "korea", "china", "india", "philippines", "vietnam",
+	"timezone", "time zone", "est", "pst", "cst", "cet",
+	"malaysia", "singapore", "thailand", "brazil", "argentina", "colombia",
+	"peru", "chile", "nigeria", "kenya", "egypt", "turkey", "pakistan",
+	"bangladesh", "sri lanka", "nepal", "cambodia", "myanmar",
 }
 
 func parseRemotive(body []byte) ([]Job, error) {

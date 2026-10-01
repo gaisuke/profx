@@ -293,18 +293,46 @@ those get a model call, one posting per call — a batch prompt would be cheaper
 per posting but the scores drift as soon as the batch composition changes, and
 consistency is the one property this product can honestly claim.
 
-**Sources** (all keyless, all verified live from this host): `kalibrr` (queried
-with `country=Indonesia` and the CV's own keywords — its default listing is
-South-East Asia-wide and came back Philippines-heavy), `remotive`, `remoteok`,
-`arbeitnow`. Excluded on purpose: `id.jobstreet.com` and `glints.com` answer 403
-to this host, and LinkedIn's HTML is both brittle and a terms-of-service problem
-not worth taking on for a first version.
+**The market is Indonesia** (`CARI_HOME_COUNTRY`), and that decides both the
+sources and the ranking. `kalibrr` is the primary board — 318 Indonesian postings
+in under two seconds, the only one here that states a city — queried with
+`country=Indonesia` and the CV's own keywords, two pages per keyword, because its
+default listing is South-East Asia-wide and comes back Philippines-heavy.
+`remotive` stays for remote roles, filtered by its own
+`candidate_required_location` so that "Worldwide" passes and "USA" or "Northern
+America, LATAM, Europe" does not.
 
-**Reachability is part of relevance.** The first live run ranked perfectly on
-keywords and was useless in practice: keyword-perfect on-site roles in Berlin and
-Redwood City outranked local ones. Remote and local postings now carry full
-weight, unknown locations 0.85, foreign on-site 0.5, and a close call (within 15%)
-goes to the posting the candidate can actually take.
+`remoteok` and `arbeitnow` are implemented, tested and switchable
+(`CARI_SOURCES=kalibrr,remotive,remoteok,arbeitnow`) but off by default: remoteok
+states no eligibility (its location field is empty or a US city, and an empty
+field is not evidence that a candidate in Jakarta can take the job) and arbeitnow
+is dominated by on-site German roles. Serving those is how the first live run
+recommended Berlin on-site work to a Jakarta candidate.
+
+**Reachability gates the ranking, not just the order.** With a preferred country
+set: Indonesian postings are kept, remote postings are kept when their own text
+admits Indonesia (discounted when it says nothing at all), and remote postings
+restricted elsewhere or on-site abroad are dropped before the model ever sees
+them. Without a preferred country the gate only orders what it is given.
+
+**Spend the model on the right role.** Keyword relevance alone let a backend CV
+fill four of six short-list slots with "Data Engineer" roles: "engineer" and
+"postgresql" matched and the deciding word did not. Titles are now discounted by
+how much of their own wording the CV has any claim to (0.6 at worst, so a title
+using an unused synonym is ranked below a plain match rather than buried).
+
+### Seeing what the matcher sees (`cmd/probe`)
+
+```bash
+go run ./cmd/probe -cv /tmp/cv.txt                  # Indonesian focus by default
+go run ./cmd/probe -cv /tmp/cv.txt -sources kalibrr,remotive,remoteok -keep 15
+```
+
+It fetches from the real boards, prints per-source counts and the top countries,
+then shows the short list with each candidate's relevance score and reachability
+factor. No model calls, no database, no quota — the cheapest way to answer "is a
+board quiet, is the eligibility rule too strict, is the ranking preferring the
+wrong kind of posting".
 
 **Cost control.** `CARI_PER_IP_PER_DAY` (2) and `CARI_GLOBAL_PER_DAY` (20) bound
 how many searches run; `CARI_KEEP` (10) bounds model calls per search;

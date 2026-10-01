@@ -206,6 +206,84 @@ func TestFilterAndRankKeepsTheBestAndCapsTheList(t *testing.T) {
 	}
 }
 
+func TestOpenToIndonesia(t *testing.T) {
+	cases := map[string]bool{
+		"Worldwide":                       true,
+		"":                                true,
+		"Anywhere":                        true,
+		"Asia, APAC":                      true,
+		"Indonesia":                       true,
+		"Remote":                          true,
+		"USA":                             false,
+		"Remote - US":                     false,
+		"Northern America, LATAM, Europe": false,
+		"Europe":                          false,
+		"USA, Canada, USA timezones":      false,
+		"Philippines":                     false,
+	}
+	for location, want := range cases {
+		if got := OpenToIndonesia(location); got != want {
+			t.Fatalf("OpenToIndonesia(%q) = %v, mau %v", location, got, want)
+		}
+	}
+}
+
+func TestSelectFallsBackToDefaultsOnUnknownNames(t *testing.T) {
+	got := Select([]string{"kalibrr", "tidak-ada-board-ini"})
+	if len(got) != 1 || got[0].Name() != "kalibrr" {
+		t.Fatalf("Select = %+v", got)
+	}
+	if names := Select(nil); len(names) != len(DefaultSourceNames()) {
+		t.Fatalf("nama kosong tidak kembali ke bawaan: %+v", names)
+	}
+	// The default set is the Indonesian one: the local board plus Remotive.
+	names := map[string]bool{}
+	for _, s := range Select(DefaultSourceNames()) {
+		names[s.Name()] = true
+	}
+	if !names["kalibrr"] || !names["remotive"] {
+		t.Fatalf("sumber bawaan tidak memuat board lokal: %+v", names)
+	}
+}
+
+func TestLocalFirstDeploymentDropsPostingsAbroad(t *testing.T) {
+	p := NewProfile(cvFixture)
+	now := time.Now()
+	jobs := []Job{
+		{Source: "s", ExternalID: "jakarta", Title: "Backend Engineer Go", Company: "A", URL: "u",
+			Location: "South Jakarta, DKI Jakarta, Indonesia", PublishedAt: now},
+		{Source: "s", ExternalID: "berlin", Title: "Backend Engineer Go PostgreSQL Kubernetes",
+			Company: "B", URL: "u", Location: "Berlin, Germany", PublishedAt: now},
+		{Source: "s", ExternalID: "unknown", Title: "Backend Engineer Go", Company: "C", URL: "u",
+			PublishedAt: now},
+		{Source: "s", ExternalID: "remote-world", Title: "Backend Engineer Go", Company: "D", URL: "u",
+			Location: "Worldwide", Remote: true, PublishedAt: now},
+		{Source: "s", ExternalID: "remote-us", Title: "Backend Engineer Go", Company: "E", URL: "u",
+			Location: "Remote - US", Remote: true, PublishedAt: now},
+		{Source: "s", ExternalID: "remote-unsaid", Title: "Backend Engineer Go", Company: "F", URL: "u",
+			Location: "Remote", Remote: true, PublishedAt: now},
+	}
+	got := FilterAndRank(p, jobs, 10, 75, "Indonesia")
+	keep := map[string]bool{}
+	for _, j := range got {
+		keep[j.ExternalID] = true
+	}
+	for _, want := range []string{"jakarta", "remote-world", "remote-unsaid"} {
+		if !keep[want] {
+			t.Fatalf("lowongan %q hilang padahal bisa diambil: %+v", want, keep)
+		}
+	}
+	for _, bad := range []string{"berlin", "unknown", "remote-us"} {
+		if keep[bad] {
+			t.Fatalf("lowongan %q lolos padahal pelamar di Jakarta tidak bisa mengambilnya: %+v", bad, keep)
+		}
+	}
+	// A local posting must beat a worldwide remote one when the keywords tie.
+	if got[0].ExternalID != "jakarta" {
+		t.Fatalf("yang lokal tidak di urutan pertama: %+v", got[0])
+	}
+}
+
 func TestRankingPrefersWhatTheCandidateCanReach(t *testing.T) {
 	p := NewProfile(cvFixture)
 	now := time.Now()
@@ -236,7 +314,7 @@ func TestRankingPrefersWhatTheCandidateCanReach(t *testing.T) {
 
 func TestDefaultSourcesHaveUniqueNames(t *testing.T) {
 	seen := map[string]bool{}
-	for _, s := range DefaultSources() {
+	for _, s := range Sources() {
 		if seen[s.Name()] {
 			t.Fatalf("nama sumber ganda: %s", s.Name())
 		}
@@ -257,7 +335,7 @@ func TestDefaultSourcesHaveUniqueNames(t *testing.T) {
 func TestSourcesRespectCancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	for _, s := range DefaultSources() {
+	for _, s := range Sources() {
 		if _, err := s.Fetch(ctx, Query{Limit: 1}); err == nil {
 			t.Fatalf("sumber %s mengabaikan context yang dibatalkan", s.Name())
 		}

@@ -135,7 +135,38 @@ func (p Profile) Relevance(j Job) float64 {
 	if descHits > 40 { // one long posting must not outweigh a matching title
 		descHits = 40
 	}
-	return float64(6*titleHits + 3*tagHits + descHits)
+	score := float64(6*titleHits + 3*tagHits + descHits)
+	return score * titleCoverage(p, title)
+}
+
+// titleCoverage measures how much of the posting's own job title the candidate
+// has any claim to, and discounts the rest. A live run with a backend CV filled
+// four of six short-list slots with "Data Engineer" roles: the words "engineer"
+// and "postgresql" matched, and the word "data" — the one that actually decides
+// the role — did not. The model scored them low, correctly, but the slots were
+// already spent.
+//
+// The discount is deliberately mild (0.6 at worst): a title using a synonym the
+// CV never needed should not be buried, only ranked below a role it plainly is.
+func titleCoverage(p Profile, title string) float64 {
+	tokens := map[string]bool{}
+	for _, w := range tokenRE.FindAllString(title, -1) {
+		if stopwords[w] || (len([]rune(w)) < 3 && !shortTech[w]) {
+			continue
+		}
+		tokens[w] = true
+	}
+	if len(tokens) == 0 {
+		return 1
+	}
+	matched := 0
+	for w := range tokens {
+		if p.Keywords[w] > 0 {
+			matched++
+		}
+	}
+	coverage := float64(matched) / float64(len(tokens))
+	return 0.6 + 0.4*coverage
 }
 
 // FilterAndRank drops what is clearly irrelevant, removes duplicates, keeps the
@@ -171,7 +202,10 @@ func FilterAndRank(profile Profile, in []Job, keep int, maxAgeDays int, preferCo
 		if score <= 0 {
 			continue
 		}
-		factor := reachability(j, preferCountry)
+		keepIt, factor := Reachability(j, preferCountry)
+		if !keepIt {
+			continue
+		}
 		scored = append(scored, struct {
 			job    Job
 			score  float64
@@ -210,31 +244,70 @@ var indonesianHints = []string{
 	"palembang", "pekanbaru", "manado", "pontianak", "asia", "apac",
 }
 
-// reachability discounts postings the candidate cannot take. A perfect keyword
-// match for an on-site role in Berlin is worse than a good match in Jakarta, and
-// the first live run proved it: the ranking was correct on keywords and useless
-// in practice, surfacing German on-site roles to a candidate in Jakarta.
+// Reachability decides whether a posting survives at all, and with what weight.
+// A perfect keyword match for an on-site role in Berlin is worse than a good
+// match in Jakarta: the first live run proved it, ranking correctly on keywords
+// and recommending German on-site work to a candidate in Jakarta.
 //
-// Remote first, local second, unknown third — and a foreign on-site role is
-// discounted rather than dropped, because it can still be the only match.
-func reachability(j Job, preferCountry string) float64 {
+// With a preferred country set (the local-first deployment), unreachable
+// postings are dropped rather than discounted, because a discount still lets them
+// into a short list that has no room for them:
+//
+//	local posting                     keep, full weight
+//	remote, eligibility says open     keep, full weight
+//	remote, eligibility unstated      keep, discounted — may surface if nothing
+//	                                  better exists
+//	remote, eligibility says closed   drop
+//	on-site abroad or unknown         drop
+//
+// Without a preferred country the gate stays out of the way and only orders what
+// it is given.
+func Reachability(j Job, preferCountry string) (bool, float64) {
 	loc := strings.ToLower(j.Location)
 	prefer := strings.ToLower(strings.TrimSpace(preferCountry))
-	if prefer != "" && strings.Contains(loc, prefer) {
-		return 1.0
+	if prefer == "" {
+		if j.Remote || loc == "" {
+			return true, 1.0
+		}
+		for _, hint := range indonesianHints {
+			if strings.Contains(loc, hint) {
+				return true, 0.95
+			}
+		}
+		return true, 0.6
 	}
-	if j.Remote {
-		return 1.0
-	}
-	if loc == "" {
-		return 0.85
+	if strings.Contains(loc, prefer) {
+		return true, 1.0
 	}
 	for _, hint := range indonesianHints {
 		if strings.Contains(loc, hint) {
-			return 0.95
+			return true, 1.0
 		}
 	}
-	return 0.5
+	if !j.Remote {
+		return false, 0 // on-site somewhere else: the candidate cannot take it
+	}
+	if !OpenToIndonesia(j.Location) {
+		return false, 0
+	}
+	if explicitlyOpen(j.Location) {
+		return true, 1.0
+	}
+	// Remote with nothing said about who may apply. Not dropped outright — some
+	// boards simply leave the field empty — but it must not outrank a posting that
+	// is definitely open.
+	return true, 0.65
+}
+
+// explicitlyOpen reports whether a posting names a scope that includes Indonesia.
+func explicitlyOpen(location string) bool {
+	loc := strings.ToLower(location)
+	for _, hint := range []string{"worldwide", "anywhere", "global", "asia", "apac", "asean", "indonesia", "southeast asia", "south-east asia"} {
+		if strings.Contains(loc, hint) {
+			return true
+		}
+	}
+	return false
 }
 
 // dedupeKey collapses the same job posted on two boards: normalised title plus

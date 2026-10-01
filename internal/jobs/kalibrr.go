@@ -50,12 +50,21 @@ type kalibrrResponse struct {
 // it, plus one unfiltered pass to catch local postings whose wording none of the
 // keywords match.
 func (k *Kalibrr) Fetch(ctx context.Context, q Query) ([]Job, error) {
-	const limit = 50
+	// The board holds over a thousand live Indonesian postings, so there is room
+	// to search wide: the CV's own strongest keywords, plus one unfiltered pass to
+	// catch local postings whose wording none of the keywords match. Each keyword
+	// is paged once, because the ordering is by recency and the second page is
+	// where the older-but-still-open local roles live.
+	const (
+		limit        = 50
+		maxKeywords  = 6
+		pagesPerText = 2
+	)
 	texts := []string{""}
 	seen := map[string]bool{}
 	for _, kw := range q.Keywords {
 		kw = strings.TrimSpace(strings.ToLower(kw))
-		if kw == "" || seen[kw] || len(texts) > 3 {
+		if kw == "" || seen[kw] || len(texts) > maxKeywords {
 			continue
 		}
 		seen[kw] = true
@@ -64,22 +73,28 @@ func (k *Kalibrr) Fetch(ctx context.Context, q Query) ([]Job, error) {
 
 	var out []Job
 	for _, text := range texts {
-		url := fmt.Sprintf("https://www.kalibrr.com/kjs/job_board/search?limit=%d&offset=0&country=Indonesia", limit)
-		if text != "" {
-			url += "&text=" + urlQueryEscape(text)
-		}
-		body, err := getJSON(ctx, url)
-		if err != nil {
-			if len(out) > 0 {
-				break // a failing keyword must not fail the whole search
+		for page := 0; page < pagesPerText; page++ {
+			url := fmt.Sprintf("https://www.kalibrr.com/kjs/job_board/search?limit=%d&offset=%d&country=Indonesia",
+				limit, page*limit)
+			if text != "" {
+				url += "&text=" + urlQueryEscape(text)
 			}
-			return nil, err
+			body, err := getJSON(ctx, url)
+			if err != nil {
+				if len(out) > 0 {
+					break // a failing keyword must not fail the whole search
+				}
+				return nil, err
+			}
+			batch, err := parseKalibrr(body)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, batch...)
+			if len(batch) < limit {
+				break // that keyword has no more pages
+			}
 		}
-		batch, err := parseKalibrr(body)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, batch...)
 	}
 	return out, nil
 }
