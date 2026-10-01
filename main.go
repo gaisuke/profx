@@ -17,6 +17,7 @@ import (
 
 	"github.com/gaisuke/profx/internal/database"
 	"github.com/gaisuke/profx/internal/handlers"
+	"github.com/gaisuke/profx/internal/jobs"
 	"github.com/gaisuke/profx/internal/llm"
 	"github.com/gaisuke/profx/internal/ragie"
 	"github.com/gaisuke/profx/internal/services"
@@ -166,6 +167,24 @@ func main() {
 	}
 	cekHandler := handlers.NewCekHandler(cekService, turnstile)
 
+	// Job matching (/cari): the CV goes in, ranked postings come out. Postings
+	// come from public boards; the model only ever sees the dozen that a free
+	// keyword filter says are worth judging.
+	cariRepo := storage.NewCariRepository(db)
+	cariService := services.NewCariService(cariRepo, llmClient, jobs.DefaultSources(), services.CariConfig{
+		PerIPLimit:  getEnvAsInt("CARI_PER_IP_PER_DAY", 2),
+		GlobalLimit: getEnvAsInt("CARI_GLOBAL_PER_DAY", 20),
+		TTL:         time.Duration(getEnvAsInt("CARI_TTL_HOURS", 48)) * time.Hour,
+		Keep:        getEnvAsInt("CARI_KEEP", 10),
+		MaxAgeDays:  getEnvAsInt("CARI_MAX_AGE_DAYS", 75),
+		Concurrency: getEnvAsInt("CARI_CONCURRENCY", 4),
+		CacheMaxAge: time.Duration(getEnvAsInt("CARI_CACHE_HOURS", 336)) * time.Hour,
+		IPSalt:      getEnv("CARI_IP_SALT", getEnv("CEK_IP_SALT", "profx-cek")),
+		HomeCountry: getEnv("CARI_HOME_COUNTRY", "Indonesia"),
+	})
+	cariService.Start(ctx)
+	cariHandler := handlers.NewCariHandler(cariService, turnstile)
+
 	// Register routes
 	http.Handle("/upload", uploadHandler)
 	http.Handle("/evaluate", evaluateHandler)
@@ -173,6 +192,8 @@ func main() {
 	http.Handle("/results", resultsHandler)
 	http.Handle("/cek", cekHandler)
 	http.Handle("/cek/", cekHandler)
+	http.Handle("/cari", cariHandler)
+	http.Handle("/cari/", cariHandler)
 	http.Handle("/healthz", opsHandler)
 	http.Handle("/retrieval-check", opsHandler)
 
@@ -188,6 +209,9 @@ func main() {
 			case <-ticker.C:
 				if _, err := cekService.Cleanup(ctx); err != nil {
 					log.Printf("cek: pembersihan gagal: %v", err)
+				}
+				if _, err := cariService.Cleanup(ctx); err != nil {
+					log.Printf("cari: pembersihan gagal: %v", err)
 				}
 			}
 		}

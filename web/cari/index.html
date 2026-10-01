@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cari lowongan yang cocok dengan CV kamu — profx</title>
+<meta name="description" content="Tempel CV-mu, pilih lokasi atau remote, lalu lihat lowongan publik yang paling cocok, diurutkan dari skor tertinggi. Gratis, tanpa daftar akun.">
+<style>
+  :root { color-scheme: dark; --bg:#0f1115; --card:#161a21; --line:#242a35; --ink:#e7eaf0;
+          --muted:#98a2b3; --accent:#4ade80; --warn:#fbbf24; --bad:#f87171; --soft:#8b93a4; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:16px/1.65 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  header { padding:20px; border-bottom:1px solid var(--line); display:flex; gap:12px; align-items:baseline; flex-wrap:wrap; }
+  header .brand { font-weight:700; letter-spacing:-.01em; }
+  header .brand span { color:var(--accent); }
+  header a { color:var(--muted); font-size:14px; text-decoration:none; }
+  main { max-width:760px; margin:0 auto; padding:26px 20px 80px; }
+  h1 { font-size:27px; line-height:1.3; letter-spacing:-.02em; margin:0 0 10px; }
+  h1 em { font-style:normal; color:var(--accent); }
+  .lead { color:var(--muted); margin:0 0 22px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px; margin-bottom:16px; }
+  .card h2 { margin:0 0 12px; font-size:14px; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); }
+  label { display:block; font-size:13.5px; color:var(--muted); margin-bottom:6px; }
+  textarea, input[type=text], select { width:100%; background:#0f1319; border:1px solid var(--line);
+      border-radius:9px; color:var(--ink); font:inherit; font-size:15px; padding:11px 12px; }
+  textarea { min-height:110px; resize:vertical; }
+  input[type=file] { width:100%; color:var(--muted); font:inherit; font-size:14px; }
+  .row { margin-bottom:16px; }
+  .hint { font-size:12.5px; color:var(--soft); margin-top:6px; }
+  .or { text-align:center; color:var(--soft); font-size:13px; margin:10px 0; }
+  button { background:var(--accent); color:#08130c; border:0; border-radius:10px; padding:13px 20px;
+           font:600 15px/1 inherit; cursor:pointer; width:100%; }
+  button:disabled { opacity:.55; cursor:progress; }
+  button.ghost { background:#1d232d; color:var(--ink); border:1px solid var(--line); }
+  .checkline { display:flex; gap:10px; align-items:flex-start; font-size:13.5px; color:var(--muted); margin:14px 0 16px; }
+  .checkline input { margin-top:3px; width:16px; height:16px; flex:none; }
+  .quota { font-size:13px; color:var(--soft); text-align:center; margin-top:12px; }
+  .err { background:#2a1719; border:1px solid #5b2a2f; color:#fca5a5; border-radius:10px; padding:12px 14px; margin-bottom:14px; font-size:14.5px; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .pill { display:inline-block; font-size:12.5px; padding:4px 10px; border-radius:999px; border:1px solid var(--line); color:var(--muted); }
+  .small { font-size:13px; color:var(--soft); }
+  a.link { color:var(--accent); }
+  .hidden { display:none; }
+  .bar { height:8px; background:#0f1319; border:1px solid var(--line); border-radius:999px; overflow:hidden; margin:12px 0 8px; }
+  .bar > i { display:block; height:100%; background:var(--accent); width:0%; transition:width .4s ease; }
+  .job { border-top:1px solid var(--line); padding:18px 0; }
+  .job:first-child { border-top:0; padding-top:0; }
+  .job-top { display:flex; gap:14px; align-items:flex-start; }
+  .badge { flex:none; width:56px; height:56px; border-radius:12px; display:flex; flex-direction:column;
+           align-items:center; justify-content:center; font-weight:700; font-size:20px; line-height:1;
+           border:1px solid var(--line); background:#0f1319; }
+  .badge small { font-size:10px; font-weight:400; color:var(--soft); margin-top:3px; }
+  .job-head { flex:1; min-width:0; }
+  .job-title { font-weight:600; font-size:17px; letter-spacing:-.01em; }
+  .job-meta { color:var(--soft); font-size:13.5px; margin-top:3px; }
+  .job-alasan { color:var(--muted); font-size:14.5px; margin:12px 0 0; }
+  .celah { margin:10px 0 0; padding:0; list-style:none; color:var(--muted); font-size:14.5px; }
+  .celah li { margin-bottom:4px; }
+  .job-actions { margin-top:12px; }
+  @media (max-width:640px){ .grid2{ grid-template-columns:1fr; } h1{ font-size:23px; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">profx <span>cari lowongan</span></div>
+  <a href="/profx/">tentang profx</a>
+  <a href="/profx/cek/">cek CV</a>
+  <a href="/inem/">inem</a>
+</header>
+
+<main>
+  <h1>Lowongan mana yang <em>benar-benar cocok</em> dengan CV-mu?</h1>
+  <p class="lead">Tempel CV-mu, pilih lokasi atau mode remote. Kami mengambil lowongan publik yang sedang
+  dibuka, menilainya satu per satu terhadap CV-mu, lalu menampilkan yang paling cocok di atas.
+  Gratis, tanpa daftar akun.</p>
+
+  <div id="err" class="err hidden"></div>
+
+  <div class="card">
+    <h2>1. CV kamu</h2>
+    <div class="row">
+      <label for="cv_text">Tempel isi CV (teks)</label>
+      <textarea id="cv_text" placeholder="Nama, pengalaman kerja, keahlian, pendidikan, pencapaian..."></textarea>
+      <div class="hint">Minimal 200 karakter. Semakin lengkap, semakin jujur pencocokannya.</div>
+    </div>
+    <div class="or">— atau —</div>
+    <div class="row">
+      <label for="cv_file">Unggah CV sebagai PDF (maks 8 MB)</label>
+      <input id="cv_file" type="file" accept="application/pdf,.pdf">
+      <div class="hint">Berkas dibaca di memori lalu langsung dibuang — tidak ditulis ke disk. Kalau CV-mu hasil scan
+      gambar, teksnya tidak terbaca: tempel manual saja.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>2. Saring lowongan (opsional)</h2>
+    <div class="row">
+      <label for="lokasi">Lokasi</label>
+      <input id="lokasi" type="text" placeholder="Indonesia, Jakarta, atau Remote">
+      <div class="hint">Kosongkan untuk semua lokasi. Isi misalnya "Indonesia" atau "Remote".</div>
+    </div>
+    <div class="row">
+      <label for="jumlah">Jumlah lowongan yang dinilai</label>
+      <select id="jumlah">
+        <option value="5">5</option>
+        <option value="10" selected>10</option>
+        <option value="15">15</option>
+        <option value="20">20</option>
+      </select>
+      <div class="hint">Setiap lowongan dinilai satu per satu, jadi semakin banyak semakin lama.</div>
+    </div>
+    <label class="checkline">
+      <input id="hanya_remote" type="checkbox">
+      <span>Hanya tampilkan lowongan remote.</span>
+    </label>
+  </div>
+
+  <div class="card">
+    <label class="checkline">
+      <input id="agree" type="checkbox">
+      <span>Saya paham: CV saya tidak disimpan. Yang tersimpan hanya hasil pencocokan,
+      dan itu terhapus otomatis setelah 48 jam.</span>
+    </label>
+    <button id="submit">Cari lowongan yang cocok</button>
+    <div class="quota" id="quota">memuat kuota…</div>
+  </div>
+
+  <div id="loading" class="card hidden">
+    <h2>sedang dicocokkan</h2>
+    <p style="margin:0" id="progress-teks">Menyiapkan…</p>
+    <div class="bar"><i id="bar"></i></div>
+    <p class="small" style="margin:0">Penilaian makan waktu beberapa menit karena setiap lowongan dinilai
+    terpisah, bukan sekadar dicocokkan kata kuncinya. Tidak perlu ditunggu di depan layar — biarkan tab ini terbuka.</p>
+  </div>
+
+  <div id="result" class="hidden">
+    <div class="card" id="ringkasan-card">
+      <h2 id="ringkasan-judul">hasil pencocokan</h2>
+      <p style="margin:0" id="ringkasan"></p>
+      <p class="small" id="expiry" style="margin-top:12px"></p>
+    </div>
+    <div id="daftar"></div>
+  </div>
+
+  <p class="small" style="margin-top:22px">
+    profx cari lowongan adalah alat bantu: ia mengurutkan lowongan publik yang sedang dibuka terhadap CV-mu.
+    Ini bukan janji kamu akan dipanggil interview, dan skornya adalah penilaian model, bukan keputusan perekrut.
+    Data lowongan diambil dari listing publik Remotive, RemoteOK, Arbeitnow, dan Kalibrr.
+  </p>
+</main>
+
+<script>
+const API = "/profx/api/cari";
+const $ = (id) => document.getElementById(id);
+let pollTimer = null;
+let lastId = null;
+
+function showErr(msg) { const e = $("err"); e.textContent = msg; e.classList.remove("hidden"); }
+function hideErr() { $("err").classList.add("hidden"); }
+
+function escapeHtml(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+async function loadQuota() {
+  try {
+    const r = await fetch(API + "/info");
+    const d = await r.json();
+    const q = d.kuota || {};
+    if (q.per_ip_limit > 0) {
+      $("quota").textContent = "Sisa " + q.remaining + " dari " + q.per_ip_limit + " pencarian gratis hari ini per pengunjung.";
+    } else {
+      $("quota").textContent = "Pencarian gratis tanpa batas per pengunjung.";
+    }
+  } catch (e) { $("quota").textContent = ""; }
+}
+
+function band(skor) {
+  if (skor <= 20) return "#f87171";
+  if (skor <= 45) return "#fb923c";
+  if (skor <= 65) return "#fbbf24";
+  if (skor <= 80) return "#a3e635";
+  return "#4ade80";
+}
+
+function tanggalId(iso) {
+  if (!iso) return "";
+  const dt = new Date(iso);
+  if (isNaN(dt.getTime())) return "";
+  return dt.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
+}
+
+function kartuLowongan(it) {
+  const low = it.lowongan || {};
+  const skor = Number(it.skor);
+  const warna = band(skor);
+  const remote = low.remote ? ' <span class="pill">remote</span>' : "";
+  const tgl = tanggalId(low.terbit);
+  const celah = Array.isArray(it.celah) ? it.celah : [];
+  const celahHtml = celah.length
+    ? '<ul class="celah">' + celah.map((c) => "<li>→ " + escapeHtml(c) + "</li>").join("") + "</ul>"
+    : "";
+  const url = low.url ? String(low.url) : "";
+  return `
+    <div class="card job">
+      <div class="job-top">
+        <div class="badge" style="color:${warna}">${skor}<small>/100</small></div>
+        <div class="job-head">
+          <div class="job-title">${escapeHtml(low.judul || "Lowongan")}</div>
+          <div class="job-meta">
+            ${escapeHtml(low.perusahaan || "Perusahaan tidak dicantumkan")}
+            · ${escapeHtml(low.lokasi || "Lokasi tidak dicantumkan")}${remote}
+            · sumber: ${escapeHtml(low.sumber || "tidak diketahui")}${tgl ? " · terbit " + escapeHtml(tgl) : ""}
+          </div>
+        </div>
+      </div>
+      <p class="job-alasan">${escapeHtml(it.alasan || "")}</p>
+      ${celahHtml}
+      ${url ? '<div class="job-actions"><a class="link" href="' + escapeHtml(url) + '" target="_blank" rel="noopener">Buka lowongan</a></div>' : ""}
+    </div>`;
+}
+
+function renderHasil(d) {
+  const list = Array.isArray(d.hasil) ? d.hasil : [];
+  $("ringkasan").textContent = "Dinilai " + (d.total != null ? d.total : list.length) + " lowongan, " +
+    list.length + " terbaik ditampilkan di bawah (skor tertinggi di atas).";
+  const exp = d.kedaluwarsa ? new Date(d.kedaluwarsa) : null;
+  $("expiry").textContent = (exp && !isNaN(exp.getTime()))
+    ? "Hasil ini berlaku sampai " + exp.toLocaleString("id-ID") + ", lalu dihapus otomatis."
+    : "";
+  if (!list.length) {
+    $("daftar").innerHTML = '<div class="card"><p style="margin:0">Tidak ada lowongan yang lolos saringan ini. ' +
+      'Coba perluas lokasi (misalnya ganti ke "Indonesia"), matikan centang remote, atau naikkan jumlah lowongan ' +
+      'yang dinilai, lalu cari lagi.</p></div>';
+  } else {
+    $("daftar").innerHTML = list.map(kartuLowongan).join("");
+  }
+  $("result").classList.remove("hidden");
+  $("result").scrollIntoView({ behavior: "smooth" });
+}
+
+function stopPoll() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+
+async function poll() {
+  if (!lastId) return;
+  try {
+    const r = await fetch(API + "/hasil/" + encodeURIComponent(lastId));
+    const d = await r.json();
+    if (!d.ok) {
+      stopPoll();
+      $("loading").classList.add("hidden");
+      showErr(d.error || "hasil tidak ditemukan atau sudah kedaluwarsa.");
+      return;
+    }
+    const total = Number(d.total) || 0;
+    const selesai = Number(d.selesai) || 0;
+    $("progress-teks").textContent = "Menilai lowongan… " + selesai + " dari " + total;
+    $("bar").style.width = (total > 0 ? Math.min(100, Math.round((selesai / total) * 100)) : 0) + "%";
+
+    if (d.status === "selesai") {
+      stopPoll();
+      $("loading").classList.add("hidden");
+      renderHasil(d);
+      loadQuota();
+    } else if (d.status === "gagal") {
+      stopPoll();
+      $("loading").classList.add("hidden");
+      showErr((d.pesan || "Pencarian gagal diproses.") + (d.hitung_ulang ? "" : " Coba lagi sebentar lagi."));
+      $("submit").disabled = false;
+    }
+  } catch (e) {
+    stopPoll();
+    $("loading").classList.add("hidden");
+    showErr("Tidak bisa menghubungi server: " + e.message + " Coba lagi.");
+    $("submit").disabled = false;
+  }
+}
+
+$("submit").addEventListener("click", async () => {
+  hideErr();
+  const cvText = $("cv_text").value.trim();
+  const file = $("cv_file").files[0];
+  const jumlah = parseInt($("jumlah").value, 10) || 10;
+  if (cvText.length < 200 && !file) { showErr("Isi CV minimal 200 karakter, atau unggah CV dalam bentuk PDF."); return; }
+  if (!$("agree").checked) { showErr("Centang dulu pernyataan soal penyimpanan data."); return; }
+
+  const fd = new FormData();
+  if (cvText) fd.append("cv_text", cvText);
+  if (file) fd.append("cv_file", file);
+  fd.append("lokasi", $("lokasi").value.trim());
+  fd.append("hanya_remote", $("hanya_remote").checked ? "true" : "false");
+  fd.append("jumlah", String(jumlah));
+
+  stopPoll();
+  $("result").classList.add("hidden");
+  $("daftar").innerHTML = "";
+  $("loading").classList.remove("hidden");
+  $("progress-teks").textContent = "Menyiapkan…";
+  $("bar").style.width = "0%";
+  $("loading").scrollIntoView({ behavior: "smooth" });
+  $("submit").disabled = true;
+
+  try {
+    const r = await fetch(API, { method: "POST", body: fd });
+    const d = await r.json();
+    if (!d.ok) {
+      $("loading").classList.add("hidden");
+      showErr(d.error || "pencarian gagal, coba lagi.");
+      $("submit").disabled = false;
+      return;
+    }
+    lastId = d.id;
+    $("progress-teks").textContent = "Menilai lowongan… 0 dari " + jumlah;
+    pollTimer = setInterval(poll, 4000);
+    poll();
+  } catch (e) {
+    $("loading").classList.add("hidden");
+    showErr("Tidak bisa menghubungi server: " + e.message);
+    $("submit").disabled = false;
+  }
+});
+
+loadQuota();
+</script>
+</body>
+</html>

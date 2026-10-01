@@ -275,6 +275,50 @@ than the async recruiter pipeline.
 The result id is 80 bits of randomness in base32, because the id is the only
 thing protecting a result page.
 
+
+## Job matching (/cari)
+
+The second self-service path: a CV goes in, ranked postings come out.
+
+```
+POST /cari             multipart: cv_text or cv_file (PDF), lokasi, hanya_remote, jumlah
+GET  /cari/hasil/{id}  status, progress, and the ranked results
+GET  /cari/info        searches left for this visitor
+```
+
+**Two stages, because the model is the expensive part.** 579 postings arrive in
+about a second from four boards; a free keyword relevance pass (title matches
+weigh 6x a body mention, tags 3x) cuts them to the dozen worth judging. Only
+those get a model call, one posting per call — a batch prompt would be cheaper
+per posting but the scores drift as soon as the batch composition changes, and
+consistency is the one property this product can honestly claim.
+
+**Sources** (all keyless, all verified live from this host): `kalibrr` (queried
+with `country=Indonesia` and the CV's own keywords — its default listing is
+South-East Asia-wide and came back Philippines-heavy), `remotive`, `remoteok`,
+`arbeitnow`. Excluded on purpose: `id.jobstreet.com` and `glints.com` answer 403
+to this host, and LinkedIn's HTML is both brittle and a terms-of-service problem
+not worth taking on for a first version.
+
+**Reachability is part of relevance.** The first live run ranked perfectly on
+keywords and was useless in practice: keyword-perfect on-site roles in Berlin and
+Redwood City outranked local ones. Remote and local postings now carry full
+weight, unknown locations 0.85, foreign on-site 0.5, and a close call (within 15%)
+goes to the posting the candidate can actually take.
+
+**Cost control.** `CARI_PER_IP_PER_DAY` (2) and `CARI_GLOBAL_PER_DAY` (20) bound
+how many searches run; `CARI_KEEP` (10) bounds model calls per search;
+`CARI_CONCURRENCY` (4) bounds how many run at once. `job_scores` caches a
+judgement per (CV fingerprint, posting) for `CARI_CACHE_HOURS` (336), so
+searching again with the same CV costs nothing for postings already judged.
+
+**Privacy, same rule as /cek.** The CV text lives in the queue entry in memory
+and is never written down; only a SHA-256 fingerprint is stored, which is what
+makes the score cache work without keeping the CV. A restart drops in-flight
+searches rather than resuming them, and that is the intended trade. Postings
+themselves are stored (they are public), results expire after `CARI_TTL_HOURS`
+(48).
+
 ### Health and diagnostics
 
 ```
